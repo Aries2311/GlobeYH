@@ -1,0 +1,19 @@
+[
+
+    {
+        "lat": 36.5167,
+        "lng": -4.8833,
+        "label": "Marbella, Spain - Key Partner",
+        "value": 0.9,
+        "color": "blue",
+        "iconUrl": "./assets/my-logo.png"
+    },
+    {
+        "lat": 14.5995,
+        "lng": 120.9842,
+        "label": "Manila, PH",
+        "value": 1.0,
+        "color": "red",
+        "iconUrl": "./assets/my-logo.png"
+    } 
+]
