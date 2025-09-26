@@ -60,10 +60,15 @@ listenToCities((cities) => {
 // Function to render pins based on is_pinned status (FIXED & UPDATED)
 function renderGlobePins(cities) {
     try {
-        const pins = cities.filter(city => city.lat && city.lng);
+        // Step 1: Paghiwalayin ang mga naka-pin at hindi naka-pin na lungsod
+        const pinnedCities = cities.filter(city => city.is_pinned);
+        const unpinnedCities = cities.filter(city => !city.is_pinned);
         
-        // Ito ang FIXED na code: Pagsamahin sa iisang chain
-        world.htmlElementsData(pins)
+        // Step 2: Pagsamahin sila, unahin ang hindi naka-pin para laging nasa harap ang naka-pin
+        const sortedPins = [...unpinnedCities, ...pinnedCities];
+
+        // Step 3: I-render ang mga pin ayon sa pagkakasunud-sunod
+        world.htmlElementsData(sortedPins)
             .htmlElement(d => {
                 const markerDiv = document.createElement('div');
                 markerDiv.style.display = 'flex';
