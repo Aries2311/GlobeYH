@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-import { getFirestore, collection, getDocs, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, doc, updateDoc, onSnapshot, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
-// Your web app's Firebase configuration from the console
 const firebaseConfig = {
     apiKey: "AIzaSyDukrt0fbcvgahbwAxiI-5NFHunsYEXdEQ",
     authDomain: "globeyh-5aabb.firebaseapp.com",
@@ -11,45 +10,102 @@ const firebaseConfig = {
     appId: "1:422300739471:web:0db5b16ee2017dbf650dfa"
 };
 
-// Initialize Firebase and Firestore
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Function to initialize the database with your static data
-async function initializeDatabaseWithData() {
-    const locations = [
-        {
-            "lat": 14.5995,
-            "lng": 120.9842,
-            "label": "Manila Office - Main Hub",
-            "value": 1.0,
-            "color": "red",
-            "iconUrl": "./assets/my-logo.png"
-        },
-        {
-            "lat": 36.5167,
-            "lng": -4.8833,
-            "label": "Marbella, Spain - Key Partner",
-            "value": 0.9,
-            "color": "blue",
-            "iconUrl": "./assets/my-logo.png"
+// New function to check for existing city
+const cityExists = async (cityLabel) => {
+    const q = query(collection(db, "all_cities"), where("label", "==", cityLabel));
+    const querySnapshot = await getDocs(q);
+    return !querySnapshot.empty;
+};
+
+const uploadCitiesFromCsv = async (file, onComplete) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const text = e.target.result;
+        const lines = text.split('\n').filter(line => line.trim() !== '');
+        
+        if (lines.length === 0) {
+            onComplete("The file is empty.", "error");
+            return;
         }
-    ];
 
-    const collectionRef = collection(db, "pinned_locations");
-    const snapshot = await getDocs(collectionRef);
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+        const cityIndex = headers.indexOf('city');
+        const countryIndex = headers.indexOf('country');
+        const latIndex = headers.indexOf('lat');
+        const lngIndex = headers.indexOf('lng');
 
-    // Only add data if the collection is empty to avoid duplicates
-    if (snapshot.empty) {
-        console.log("Database is empty. Populating with initial data...");
-        for (const loc of locations) {
-            await setDoc(doc(collectionRef), loc);
+        if (cityIndex === -1 || countryIndex === -1 || latIndex === -1 || lngIndex === -1) {
+            onComplete("CSV must have 'city', 'country', 'lat', and 'lng' columns.", "error");
+            return;
         }
-        console.log("Database populated successfully!");
-    } else {
-        console.log("Database is already populated. Skipping initial data creation.");
-    }
-}
 
-// Export the database instance and the initialization function
-export { db, initializeDatabaseWithData };
+        let uploadedCount = 0;
+        let duplicateCount = 0;
+        
+        for (const line of lines.slice(1)) {
+            const values = line.split(',');
+            const cityLabel = `${values[cityIndex].replace(/"/g, '')}, ${values[countryIndex].replace(/"/g, '')}`;
+            
+            // Check for duplicates before uploading
+            const exists = await cityExists(cityLabel);
+            if (exists) {
+                duplicateCount++;
+                continue; // Skip this city
+            }
+
+            const lat = parseFloat(values[latIndex].replace(/"/g, ''));
+            const lng = parseFloat(values[lngIndex].replace(/"/g, ''));
+            
+            if (isNaN(lat) || isNaN(lng)) {
+                // Skip invalid data
+                continue;
+            }
+
+            const cityData = {
+                label: cityLabel,
+                lat: lat,
+                lng: lng,
+                is_pinned: false
+            };
+
+            try {
+                await addDoc(collection(db, "all_cities"), cityData);
+                uploadedCount++;
+            } catch (error) {
+                console.error(`Error adding city ${cityLabel}:`, error);
+                // Continue to the next city even if one fails
+            }
+        }
+
+        let message = `Successfully uploaded ${uploadedCount} cities.`;
+        if (duplicateCount > 0) {
+            message += ` ${duplicateCount} cities were skipped because they already exist.`;
+        }
+        onComplete(message, "success");
+    };
+    reader.readAsText(file);
+};
+
+const togglePinStatus = async (docId, currentStatus) => {
+    const docRef = doc(db, "all_cities", docId);
+    await updateDoc(docRef, {
+        is_pinned: !currentStatus
+    });
+};
+
+const listenToCities = (callback) => {
+    const citiesRef = collection(db, "all_cities");
+    return onSnapshot(citiesRef, (querySnapshot) => {
+        const cities = [];
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            cities.push({ id: doc.id, ...data });
+        });
+        callback(cities);
+    });
+};
+
+export { db, uploadCitiesFromCsv, togglePinStatus, listenToCities };
