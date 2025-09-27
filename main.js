@@ -65,7 +65,7 @@ function renderGlobeMarkers(data) {
             // On Click Event: Mag-zoom in at magpakita ng Pinning Modal
             img.onclick = (event) => {
                 event.stopPropagation();
-                
+
                 // Ipakita ang Pinning Modal
                 const status = d.is_pinned ? 'Yes' : 'No';
                 pinningModalText.textContent = `Nais mo bang i-toggle ang pin status para sa ${d.label}? Kasalukuyang status: ${status}.`;
