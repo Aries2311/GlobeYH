@@ -35,7 +35,7 @@ const world = Globe()(globeContainer)
     
 // 2. I-set ang auto-rotation
 world.controls().autoRotate = true;
-world.controls().autoRotateSpeed = 0.3
+world.controls().autoRotateSpeed = 0.0
 
 
 // *******************************************************************
