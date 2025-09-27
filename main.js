@@ -65,8 +65,7 @@ function renderGlobeMarkers(data) {
             // On Click Event: Mag-zoom in at magpakita ng Pinning Modal
             img.onclick = (event) => {
                 event.stopPropagation();
-                // Mag-zoom in sa lokasyon
-                world.pointOfView({ lat: d.lat, lng: d.lng, altitude: 0.5 }, 1000);
+
                 
                 // Ipakita ang Pinning Modal
                 const status = d.is_pinned ? 'Yes' : 'No';
@@ -196,8 +195,8 @@ function displaySearchResults(results) {
                 const li = document.createElement('li');
                 li.textContent = city.label;
                 li.onclick = () => {
-                    // Mag-zoom in sa pinili na lokasyon
-                    world.pointOfView({ lat: city.lat, lng: city.lng, altitude: 0.5 }, 1000);
+            
+                   
                     
                     searchResultsList.style.display = 'none';
                     searchInput.value = '';
