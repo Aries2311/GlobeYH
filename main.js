@@ -1,14 +1,20 @@
 import { uploadCitiesFromCsv, togglePinStatus, listenToCities } from "./firebase.js";
 
-// Global variables
-let allCities = [];
-const defaultPinUrl = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="yellow" stroke="white" stroke-width="10"/></svg>';
+// Global variables para sa data at UI state
+let allCities = []; // Dito i-store ang lahat ng cities mula sa Firestore
+let searchTimeout; // Para sa debouncing ng search input
+
+// Default SVG pin icon (dilaw na dot) para sa UNPINNED
+const defaultPinUrl = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#FFC300" stroke="white" stroke-width="10"/></svg>';
+// Custom Image URL para sa NAKA-PIN na lokasyon. ITO ANG UPDATED PATH
 const customImageUrl = './assets/my-logo.png'; 
 
 // UI elements
 const globeContainer = document.getElementById('globeViz');
+// Bootstrap Modals
 const uploadModal = new bootstrap.Modal(document.getElementById('uploadModal'));
 const pinningModal = new bootstrap.Modal(document.getElementById('pinningModal'));
+// Input/Buttons/Status
 const searchInput = document.getElementById('search-input');
 const searchResultsList = document.getElementById('search-results');
 const pinningModalText = document.getElementById('pinningModalText');
@@ -16,128 +22,152 @@ const togglePinBtn = document.getElementById('togglePinBtn');
 const uploadBtn = document.getElementById('uploadBtn');
 const loadingSpinner = document.getElementById('loading-spinner');
 const statusMessage = document.getElementById('statusMessage');
+const csvFile = document.getElementById('csvFile');
 
-// Initialize the Globe
+
+// 1. I-initialize ang Globe
 const world = Globe()(globeContainer)
     .globeImageUrl('//unpkg.com/three-globe/example/img/earth-day.jpg')
     .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
     .showGraticules(true)
     .showAtmosphere(true)
     .backgroundColor('#000011');
+    
+// 2. I-set ang auto-rotation
+world.controls().autoRotate = true;
+world.controls().autoRotateSpeed = 0.3
 
-// Handle CSV Upload
-uploadBtn.addEventListener('click', () => {
-    const file = document.getElementById('csvFile').files[0];
+
+// *******************************************************************
+// 3. GLOBE MARKER RENDERING FUNCTION
+// *******************************************************************
+
+/**
+ * Nagre-render ng custom HTML marker para sa globe.
+ * @param {Object} data - City data mula sa Firestore (Naka-filter na sa is_pinned=true).
+ */
+function renderGlobeMarkers(data) {
+    world.htmlElementsData(data)
+        .htmlElement(d => {
+            // Gumawa ng container para sa logo at label
+            const markerDiv = document.createElement('div');
+            markerDiv.className = 'marker-container';
+
+            // Pumili ng icon/image URL batay sa 'is_pinned' status
+            // Dahil naka-filter na ang data, lahat ng nasa listahan ay naka-pin na.
+            const iconUrl = d.is_pinned ? customImageUrl : defaultPinUrl;
+            
+            // I-create ang ICON (Image)
+            const img = document.createElement('img');
+            img.className = 'marker-icon';
+            img.src = iconUrl; 
+            
+            // On Click Event: Mag-zoom in at magpakita ng Pinning Modal
+            img.onclick = (event) => {
+                event.stopPropagation();
+                // Mag-zoom in sa lokasyon
+                world.pointOfView({ lat: d.lat, lng: d.lng, altitude: 0.5 }, 1000);
+                
+                // Ipakita ang Pinning Modal
+                const status = d.is_pinned ? 'Yes' : 'No';
+                pinningModalText.textContent = `Nais mo bang i-toggle ang pin status para sa ${d.label}? Kasalukuyang status: ${status}.`;
+                togglePinBtn.dataset.docId = d.id;
+                togglePinBtn.dataset.currentStatus = d.is_pinned;
+                pinningModal.show();
+            };
+            
+            // I-create ang TEXT LABEL (City Name)
+            const label = document.createElement('span');
+            label.className = 'marker-label';
+            // Kunin lang ang city name bago ang ','
+            label.textContent = d.label.split(',')[0]; 
+
+            // I-append ang elements sa container
+            markerDiv.appendChild(img);
+            markerDiv.appendChild(label);
+
+            return markerDiv;
+        })
+        .lat(d => d.lat)
+        .lng(d => d.lng)
+        .altitude(0.005);
+}
+
+
+// *******************************************************************
+// 4. EVENT LISTENERS AT APP INITIALIZATION
+// *******************************************************************
+
+// Handle CSV Upload sa modal
+uploadBtn.addEventListener('click', async () => {
+    const file = csvFile.files[0];
     if (!file) {
-        statusMessage.textContent = "Paki-pili muna ang file.";
+        statusMessage.className = 'mt-3 text-danger';
+        statusMessage.textContent = 'Pumili muna ng CSV file.';
         return;
     }
-    
-    // Set loading state
-    uploadBtn.disabled = true;
-    loadingSpinner.classList.remove('d-none');
-    statusMessage.textContent = "Ina-upload at iniimbak ang file...";
 
-    uploadCitiesFromCsv(file, (message, type) => {
-        statusMessage.textContent = message;
-        statusMessage.style.color = type === 'success' ? 'green' : 'red';
-        
-        // Reset loading state
+    // Simulan ang loading state
+    uploadBtn.disabled = true;
+    loadingSpinner.style.display = 'inline-block';
+    statusMessage.className = 'mt-3 text-info';
+    statusMessage.textContent = 'Ina-upload at ini-store sa database...';
+
+    // Call ang upload function mula sa firebase.js
+    await uploadCitiesFromCsv(file, (message, type) => {
+        // Tapusin ang loading state
         uploadBtn.disabled = false;
-        loadingSpinner.classList.add('d-none');
+        loadingSpinner.style.display = 'none';
+
+        Swal.fire({
+            icon: type,
+            title: type === 'success' ? 'Tagumpay!' : 'May Problema',
+            text: message,
+        });
+
+        // Isara ang modal kung successful
         if (type === 'success') {
-            document.getElementById('csvFile').value = '';
+            uploadModal.hide();
+            csvFile.value = '';
         }
     });
 });
 
-// Real-time listener from Firebase
-listenToCities((cities) => {
-    allCities = cities.filter(city => city.lat && city.lng);
-    renderGlobePins(allCities);
-});
-
-// Function to render pins based on is_pinned status (FIXED & UPDATED)
-function renderGlobePins(cities) {
-    try {
-        // Step 1: Paghiwalayin ang mga naka-pin at hindi naka-pin na lungsod
-        const pinnedCities = cities.filter(city => city.is_pinned);
-        const unpinnedCities = cities.filter(city => !city.is_pinned);
-        
-        // Step 2: Pagsamahin sila, unahin ang hindi naka-pin para laging nasa harap ang naka-pin
-        const sortedPins = [...unpinnedCities, ...pinnedCities];
-
-        // Step 3: I-render ang mga pin ayon sa pagkakasunud-sunod
-        world.htmlElementsData(sortedPins)
-            .htmlElement(d => {
-                const markerDiv = document.createElement('div');
-                markerDiv.style.display = 'flex';
-                markerDiv.style.flexDirection = 'column';
-                markerDiv.style.alignItems = 'center';
-                markerDiv.style.cursor = 'pointer';
-
-                const icon = document.createElement('img');
-                // Use customImageUrl for pinned cities, defaultPinUrl for unpinned
-                icon.src = d.is_pinned ? customImageUrl : defaultPinUrl;
-                icon.style.width = d.is_pinned ? '70px' : '20px';
-                icon.style.height = d.is_pinned ? '70px' : '20px';
-                icon.style.borderRadius = d.is_pinned ? '50%' : '50%';
-                icon.title = d.label;
-
-                icon.onclick = () => {
-                    const status = d.is_pinned ? 'Yes' : 'No';
-                    pinningModalText.textContent = `Do you want to toggle the pin status for ${d.label}? Current status: ${status}.`;
-                    togglePinBtn.dataset.docId = d.id;
-                    togglePinBtn.dataset.currentStatus = d.is_pinned;
-                    pinningModal.show();
-                };
-
-                markerDiv.appendChild(icon);
-
-                // --- NEW: Add city name label if it is pinned ---
-                if (d.is_pinned) {
-                    const label = document.createElement('span');
-                    const cityName = d.label.split(',')[0].trim();
-                    label.textContent = cityName; 
-                    
-                    // Styling for the label
-                    label.style.marginTop = '2px';
-                    label.style.color = 'white';
-                    label.style.fontSize = '12px'; 
-                    label.style.fontWeight = 'bold';
-                    label.style.textAlign = 'center';
-                    label.style.textShadow = '0 0 5px black, 0 0 5px black'; 
-
-                    markerDiv.appendChild(label);
-                }
-                // --------------------------------------------------
-
-                return markerDiv;
-            })
-            .lat(d => d.lat)
-            .lng(d => d.lng)
-            .altitude(0.01);
-
-    } catch (error) {
-        console.error("Error in renderGlobePins:", error);
-    }
-}
-
-// Handle pinning modal button click
+// Handle Toggle Pin Button sa pinning modal
 togglePinBtn.addEventListener('click', async () => {
-    try {
-        const docId = togglePinBtn.dataset.docId;
-        const currentStatus = togglePinBtn.dataset.currentStatus === 'true';
+    const docId = togglePinBtn.dataset.docId;
+    const currentStatus = togglePinBtn.dataset.currentStatus === 'true';
 
-        await togglePinStatus(docId, currentStatus);
+    if (docId) {
         pinningModal.hide();
-    } catch (error) {
-        console.error("Error toggling pin status:", error);
+        await togglePinStatus(docId, currentStatus);
     }
 });
 
-// Search functionality
-let searchTimeout;
+// Real-time Data Listener Setup
+window.onload = () => {
+    try {
+        // Tinitiyak nito na tuwing may magbabago sa 'is_pinned' status sa Firestore, 
+        // magre-refresh ang globe at ipapakita lang ang mga naka-pin.
+        listenToCities((cities) => {
+            console.log(`May ${cities.length} na lokasyon na-load mula sa Firestore.`);
+            allCities = cities;
+            
+            // ITO ANG SIGURADUHIN: NAKA-FILTER TAYO SA is_pinned = true LAMANG
+            const pinnedCities = allCities.filter(city => city.is_pinned);
+            renderGlobeMarkers(pinnedCities);
+        });
+    } catch (error) {
+        console.error("Error setting up Firestore listener:", error);
+    }
+};
+
+
+// *******************************************************************
+// 5. SEARCH FUNCTIONALITY
+// *******************************************************************
+
+// Debounced search input handler
 searchInput.addEventListener('input', () => {
     clearTimeout(searchTimeout);
     searchResultsList.style.display = 'none';
@@ -148,6 +178,7 @@ searchInput.addEventListener('input', () => {
 
     searchTimeout = setTimeout(() => {
         try {
+            // I-filter mula sa allCities array
             const results = allCities.filter(city => city.label.toLowerCase().includes(query));
             displaySearchResults(results);
         } catch (error) {
@@ -165,13 +196,15 @@ function displaySearchResults(results) {
                 const li = document.createElement('li');
                 li.textContent = city.label;
                 li.onclick = () => {
+                    // Mag-zoom in sa pinili na lokasyon
                     world.pointOfView({ lat: city.lat, lng: city.lng, altitude: 0.5 }, 1000);
                     
                     searchResultsList.style.display = 'none';
                     searchInput.value = '';
                     
+                    // Ipakita ang pin modal (Dito magsisimula ang manual pinning)
                     const status = city.is_pinned ? 'Yes' : 'No';
-                    pinningModalText.textContent = `Do you want to toggle the pin status for ${city.label}? Current status: ${status}.`;
+                    pinningModalText.textContent = `Nais mo bang i-toggle ang pin status para sa ${city.label}? Kasalukuyang status: ${status}.`;
                     togglePinBtn.dataset.docId = city.id;
                     togglePinBtn.dataset.currentStatus = city.is_pinned;
                     pinningModal.show();
