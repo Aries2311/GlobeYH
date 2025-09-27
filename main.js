@@ -34,7 +34,7 @@ const world = Globe()(globeContainer)
     .backgroundColor('#000011');
     
 // 2. I-set ang auto-rotation
-world.controls().autoRotate = true;
+world.controls().autoRotate = false;
 world.controls().autoRotateSpeed = 0.0
 
 
