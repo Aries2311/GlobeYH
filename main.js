@@ -1,5 +1,4 @@
 import { uploadCitiesFromCsv, togglePinStatus, listenToCities } from "./firebase.js";
-// NEW: Import the effects functions
 import { addStars, setupComets } from "./background-effects.js";
 
 // ---------------------------
@@ -21,28 +20,15 @@ const canonicalIdOf = (obj) => {
   return `${slug(cityName)}_${lat.toFixed(4)}_${lng.toFixed(4)}`;
 };
 
-// Given a clicked/search result, pick the best docId to toggle:
-// 1) if there’s any pinned duplicate for same city+coords -> toggle THAT doc
-// 2) else -> toggle the canonical doc id
+// STRICT selector: toggle only the exact Firestore doc; no "pinned duplicate" shortcut
 const pickTargetDoc = (obj, all) => {
-  const cityOnly = (obj.label || "").split(",")[0].trim().toLowerCase();
-  const lat4 = Number(obj.lat).toFixed(4);
-  const lng4 = Number(obj.lng).toFixed(4);
-
-  const matches = all.filter(x =>
-    String(Number(x.lat).toFixed(4)) === lat4 &&
-    String(Number(x.lng).toFixed(4)) === lng4 &&
-    (x.label || "").split(",")[0].trim().toLowerCase() === cityOnly
-  );
-
-  const pinnedDup = matches.find(m => !!m.is_pinned);
-  if (pinnedDup) {
-    return { docId: pinnedDup.id, isPinned: true };
+  if (obj.id) {
+    const exact = all.find(x => x.id === obj.id);
+    return { docId: obj.id, isPinned: !!(exact && exact.is_pinned) };
   }
-
   const cid = canonicalIdOf(obj);
-  const canonical = all.find(x => x.id === cid);
-  return { docId: cid, isPinned: !!(canonical && canonical.is_pinned) };
+  const found = all.find(x => x.id === cid);
+  return { docId: cid, isPinned: !!(found && found.is_pinned) };
 };
 
 // ---------------------------
@@ -57,29 +43,29 @@ const defaultPinUrl =
 const customImageUrl = './assets/my-logo.png';
 
 // Elements
-const globeContainer = document.getElementById('globeViz');
-const uploadModal = new bootstrap.Modal(document.getElementById('uploadModal'));
-const pinningModal = new bootstrap.Modal(document.getElementById('pinningModal'));
+const globeContainer   = document.getElementById('globeViz');
+const uploadModal      = new bootstrap.Modal(document.getElementById('uploadModal'));
+const pinningModal     = new bootstrap.Modal(document.getElementById('pinningModal'));
 
-const searchInput = document.getElementById('search-input');
-const searchResultsList = document.getElementById('search-results');
+const searchInput      = document.getElementById('search-input');
+const searchResultsList= document.getElementById('search-results');
 const pinningModalText = document.getElementById('pinningModalText');
-const pinningModalLabel = document.getElementById('pinningModalLabel');
-const togglePinBtn = document.getElementById('togglePinBtn');
-const uploadBtn = document.getElementById('uploadBtn');
-const loadingSpinner = document.getElementById('loading-spinner');
-const statusMessage = document.getElementById('statusMessage');
-const csvFile = document.getElementById('csvFile');
+const pinningModalLabel= document.getElementById('pinningModalLabel');
+const togglePinBtn     = document.getElementById('togglePinBtn');
+const uploadBtn        = document.getElementById('uploadBtn');
+const loadingSpinner   = document.getElementById('loading-spinner');
+const statusMessage    = document.getElementById('statusMessage');
+const csvFile          = document.getElementById('csvFile');
 
 // ---------------------------
-// Force English + hide upload for public
+// UI text + Upload visibility for public
 // ---------------------------
 searchInput?.setAttribute('placeholder', 'Search location...');
 if (uploadBtn) uploadBtn.textContent = 'Upload';
 
-const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+const isLocal     = ['localhost', '127.0.0.1'].includes(location.hostname);
 const isAdminFlag = localStorage.getItem('yh_admin') === '1';
-const canUpload = isLocal || isAdminFlag;
+const canUpload   = isLocal || isAdminFlag;
 const uploadGroup = document.getElementById('uploadControls') || uploadBtn?.parentElement;
 if (uploadGroup && !canUpload) uploadGroup.style.display = 'none';
 
@@ -91,9 +77,23 @@ const world = Globe()(globeContainer)
   .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
   .showGraticules(true)
   .showAtmosphere(true)
-  .backgroundColor('#000011')
+  .backgroundColor('#000011');
+
 world.controls().autoRotate = false;
 world.controls().autoRotateSpeed = 0.0;
+
+// --- Embed support (optional) ---
+const params = new URLSearchParams(location.search);
+const EMBED = params.has('embed') || params.get('bg') === 'transparent';
+if (EMBED) {
+  world.backgroundColor('rgba(0,0,0,0)');
+  globeContainer.style.background = 'transparent';
+  document.body.style.background = 'transparent';
+  const searchWrap = document.querySelector('.search-bar-container');
+  if (searchWrap) searchWrap.style.display = 'none';
+  const up = document.getElementById('uploadControls');
+  if (up) up.style.display = 'none';
+}
 
 // ---------------------------
 // Render HTML markers (only pinned)
@@ -112,12 +112,11 @@ function renderGlobeMarkers(data) {
       img.onclick = (event) => {
         event.stopPropagation();
 
-        // Choose correct target doc to toggle
+        // Only admins can open the pin dialog
+        if (!isLocal && !isAdminFlag) return;
+
         const target = pickTargetDoc(d, allCities);
         const isPinned = !!target.isPinned;
-
-        // Admin check: only show the modal for admins
-        if (!isLocal && !isAdminFlag) return; // Non-local or non-admin users can't open the modal
 
         pinningModalLabel && (pinningModalLabel.textContent = 'Pin / Unpin Location');
         pinningModalText.textContent =
@@ -180,17 +179,16 @@ uploadBtn?.addEventListener('click', async () => {
 });
 
 // ---------------------------
-// Toggle pin write
+// Toggle pin write (admin-only)
 // ---------------------------
 togglePinBtn.addEventListener('click', async () => {
-  // Admin check for pinning action
   if (!isLocal && !isAdminFlag) {
     alert('You do not have permission to pin/unpin locations.');
-    return; // Prevent pinning if not an admin
+    return;
   }
-
   const docId = togglePinBtn.dataset.docId;
   const currentStatus = togglePinBtn.dataset.currentStatus === 'true';
+
   if (docId) {
     pinningModal.hide();
     await togglePinStatus(docId, currentStatus);
@@ -203,24 +201,19 @@ togglePinBtn.addEventListener('click', async () => {
 window.onload = () => {
   try {
     listenToCities((cities) => {
-      allCities = cities; // keep ALL docs
-
-      // Only render pinned markers
+      allCities = cities;
       const pinnedCities = allCities.filter(c => !!c.is_pinned);
       renderGlobeMarkers(pinnedCities);
-
-      console.log(`Loaded ${cities.length} locations from Firestore.`);
+      console.log(`[SNAPSHOT] total=${allCities.length} pinned=${pinnedCities.length}`);
     });
   } catch (error) {
     console.error("Error setting up Firestore listener:", error);
   }
 
-  // ---------------------------
-  // Background effects initialization (stars/comets)
-  // ---------------------------
+  // Background effects
   if (world) {
-    addStars(world);  // Add stars
-    setupComets();    // Set up comets
+    addStars(world);
+    setupComets();
   }
 };
 
@@ -236,7 +229,6 @@ searchInput.addEventListener('input', () => {
   searchTimeout = setTimeout(() => {
     try {
       const matches = allCities.filter(c => (c.label || '').toLowerCase().includes(q));
-      // Deduplicate by canonical id and prefer pinned
       const byId = new Map();
       for (const m of matches) {
         const cid = canonicalIdOf(m);
@@ -265,6 +257,8 @@ function displaySearchResults(results) {
           world.pointOfView({ lat: city.lat, lng: city.lng, altitude: 0.5 }, 1000);
           searchResultsList.style.display = 'none';
           searchInput.value = '';
+
+          if (!isLocal && !isAdminFlag) return;
 
           const target = pickTargetDoc(city, allCities);
           const isPinned = !!target.isPinned;
