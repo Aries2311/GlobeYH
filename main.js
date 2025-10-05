@@ -23,11 +23,11 @@ const canonicalIdOf = (obj) => {
 // STRICT selector: toggle only the exact Firestore doc; no "pinned duplicate" shortcut
 const pickTargetDoc = (obj, all) => {
   if (obj.id) {
-    const exact = all.find(x => x.id === obj.id);
+    const exact = all.find((x) => x.id === obj.id);
     return { docId: obj.id, isPinned: !!(exact && exact.is_pinned) };
   }
   const cid = canonicalIdOf(obj);
-  const found = all.find(x => x.id === cid);
+  const found = all.find((x) => x.id === cid);
   return { docId: cid, isPinned: !!(found && found.is_pinned) };
 };
 
@@ -40,103 +40,90 @@ let searchTimeout;
 // Icons
 const defaultPinUrl =
   'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#FFC300" stroke="white" stroke-width="10"/></svg>';
-const customImageUrl = './assets/my-logo.png';
+const customImageUrl = "./assets/my-logo.png";
 
 // Elements
-const globeContainer   = document.getElementById('globeViz');
-const uploadModal      = new bootstrap.Modal(document.getElementById('uploadModal'));
-const pinningModal     = new bootstrap.Modal(document.getElementById('pinningModal'));
+const globeContainer = document.getElementById("globeViz");
+const uploadModal = new bootstrap.Modal(document.getElementById("uploadModal"));
+const pinningModal = new bootstrap.Modal(document.getElementById("pinningModal"));
 
-const searchInput      = document.getElementById('search-input');
-const searchResultsList= document.getElementById('search-results');
-const pinningModalText = document.getElementById('pinningModalText');
-const pinningModalLabel= document.getElementById('pinningModalLabel');
-const togglePinBtn     = document.getElementById('togglePinBtn');
-const uploadBtn        = document.getElementById('uploadBtn');
-const loadingSpinner   = document.getElementById('loading-spinner');
-const statusMessage    = document.getElementById('statusMessage');
-const csvFile          = document.getElementById('csvFile');
+const searchInput = document.getElementById("search-input");
+const searchResultsList = document.getElementById("search-results");
+const pinningModalText = document.getElementById("pinningModalText");
+const pinningModalLabel = document.getElementById("pinningModalLabel");
+const togglePinBtn = document.getElementById("togglePinBtn");
+const uploadBtn = document.getElementById("uploadBtn");
+const loadingSpinner = document.getElementById("loading-spinner");
+const statusMessage = document.getElementById("statusMessage");
+const csvFile = document.getElementById("csvFile");
 
 // ---------------------------
 // UI text + Upload visibility for public
 // ---------------------------
-searchInput?.setAttribute('placeholder', 'Search location...');
-if (uploadBtn) uploadBtn.textContent = 'Upload';
+searchInput?.setAttribute("placeholder", "Search location...");
+if (uploadBtn) uploadBtn.textContent = "Upload";
 
-const isLocal     = ['localhost', '127.0.0.1'].includes(location.hostname);
-const isAdminFlag = localStorage.getItem('yh_admin') === '1';
-const canUpload   = isLocal || isAdminFlag;
-const uploadGroup = document.getElementById('uploadControls') || uploadBtn?.parentElement;
-if (uploadGroup && !canUpload) uploadGroup.style.display = 'none';
+const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+const isAdminFlag = localStorage.getItem("yh_admin") === "1";
+const canUpload = isLocal || isAdminFlag;
+const uploadGroup = document.getElementById("uploadControls") || uploadBtn?.parentElement;
+if (uploadGroup && !canUpload) uploadGroup.style.display = "none";
 
 // ---------------------------
 // Globe init
 // ---------------------------
 const world = Globe()(globeContainer)
-  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-day.jpg')
-  .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+  .globeImageUrl("//unpkg.com/three-globe/example/img/earth-day.jpg")
+  .bumpImageUrl("//unpkg.com/three-globe/example/img/earth-topology.png")
   .showGraticules(true)
   .showAtmosphere(true)
-  .backgroundColor('#000011');
+  .backgroundColor("#000011");
+
+// Controls base
+world.controls().autoRotate = false;
+world.controls().autoRotateSpeed = 0.0;
+
 // ---- Embed interaction switches ----
 const urlParams = new URLSearchParams(location.search);
-const NO_ZOOM = urlParams.has('nozoom') || urlParams.get('zoom') === '0';
+const NO_ZOOM = urlParams.has("nozoom") || urlParams.get("zoom") === "0";
 
-// keep autorotate off as you already have
 const ctrl = world.controls();
-
 if (NO_ZOOM) {
-  // 1) Turn off OrbitControls zoom
+  // Disable zoom interactions
   ctrl.enableZoom = false;
 
-  // 2) Lock distance so programmatic zooms won't change it
+  // Lock camera distance to current so programmatic zooms won't change size
   const cam = world.camera();
   const dist = cam.position.length();
   ctrl.minDistance = dist;
   ctrl.maxDistance = dist;
 
-  // 3) Hard-stop wheel & pinch from the DOM side (prevents edge cases)
+  // IMPORTANT: do NOT block wheel — let wheel scroll bubble to parent page.
+  // (Keep pinch-zoom blocked only for multi-touch)
   const dom = world.renderer().domElement;
-  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
-  dom.addEventListener('wheel', stop, { passive: false });
-  // block trackpad pinch-as-wheel and double-finger scroll on some browsers
-  dom.addEventListener('touchmove', (e) => {
-    if (e.touches && e.touches.length > 1) stop(e);
-  }, { passive: false });
+  const stop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  dom.addEventListener(
+    "touchmove",
+    (e) => {
+      if (e.touches && e.touches.length > 1) stop(e); // block two-finger pinch only
+    },
+    { passive: false }
+  );
 }
 
-// (Optional) keep rotate allowed, but you can block pan if you want later:
-// if (urlParams.has('nopan')) ctrl.enablePan = false;
-// if (urlParams.has('norotate')) ctrl.enableRotate = false;
-
-world.controls().autoRotate = false;
-world.controls().autoRotateSpeed = 0.0;
-// NEW: read URL params to control interactions
-const urlparams = new URLSearchParams(location.search);
-
-// --- Option A: disable only ZOOM ---
-if (urlParams.has('nozoom') || urlParams.get('zoom') === '0') {
-  const ctrl = world.controls();
-  // turn off zoom gestures (wheel/pinch, etc.)
-  ctrl.enableZoom = false;
-
-  // hard-lock distance so programmatic zooms won’t change it
-  const cam = world.camera();
-  const currentDist = cam.position.length(); // distance from origin
-  ctrl.minDistance = currentDist;
-  ctrl.maxDistance = currentDist;
-}
 // --- Embed support (optional) ---
-const params = new URLSearchParams(location.search);
-const EMBED = params.has('embed') || params.get('bg') === 'transparent';
+const EMBED = urlParams.has("embed") || urlParams.get("bg") === "transparent";
 if (EMBED) {
-  world.backgroundColor('rgba(0,0,0,0)');
-  globeContainer.style.background = 'transparent';
-  document.body.style.background = 'transparent';
-  const searchWrap = document.querySelector('.search-bar-container');
-  if (searchWrap) searchWrap.style.display = 'none';
-  const up = document.getElementById('uploadControls');
-  if (up) up.style.display = 'none';
+  world.backgroundColor("rgba(0,0,0,0)");
+  globeContainer.style.background = "transparent";
+  document.body.style.background = "transparent";
+  const searchWrap = document.querySelector(".search-bar-container");
+  if (searchWrap) searchWrap.style.display = "none";
+  const up = document.getElementById("uploadControls");
+  if (up) up.style.display = "none";
 }
 
 // ---------------------------
@@ -145,12 +132,12 @@ if (EMBED) {
 function renderGlobeMarkers(data) {
   world
     .htmlElementsData(data)
-    .htmlElement(d => {
-      const markerDiv = document.createElement('div');
-      markerDiv.className = 'marker-container';
+    .htmlElement((d) => {
+      const markerDiv = document.createElement("div");
+      markerDiv.className = "marker-container";
 
-      const img = document.createElement('img');
-      img.className = 'marker-icon';
+      const img = document.createElement("img");
+      img.className = "marker-icon";
       img.src = d.is_pinned ? customImageUrl : defaultPinUrl;
 
       img.onclick = (event) => {
@@ -162,13 +149,14 @@ function renderGlobeMarkers(data) {
         const target = pickTargetDoc(d, allCities);
         const isPinned = !!target.isPinned;
 
-        pinningModalLabel && (pinningModalLabel.textContent = 'Pin / Unpin Location');
-        pinningModalText.textContent =
-          `Do you want to toggle the pin status for ${d.label}? Current: ${isPinned ? 'Yes' : 'No'}.`;
+        pinningModalLabel && (pinningModalLabel.textContent = "Pin / Unpin Location");
+        pinningModalText.textContent = `Do you want to toggle the pin status for ${d.label}? Current: ${
+          isPinned ? "Yes" : "No"
+        }`;
 
-        togglePinBtn.textContent = isPinned ? 'Unpin' : 'Pin';
-        togglePinBtn.classList.toggle('btn-danger', isPinned);
-        togglePinBtn.classList.toggle('btn-primary', !isPinned);
+        togglePinBtn.textContent = isPinned ? "Unpin" : "Pin";
+        togglePinBtn.classList.toggle("btn-danger", isPinned);
+        togglePinBtn.classList.toggle("btn-primary", !isPinned);
 
         togglePinBtn.dataset.docId = target.docId;
         togglePinBtn.dataset.currentStatus = String(isPinned);
@@ -176,48 +164,48 @@ function renderGlobeMarkers(data) {
         pinningModal.show();
       };
 
-      const label = document.createElement('span');
-      label.className = 'marker-label';
-      label.textContent = (d.label || '').split(',')[0];
+      const label = document.createElement("span");
+      label.className = "marker-label";
+      label.textContent = (d.label || "").split(",")[0];
 
       markerDiv.appendChild(img);
       markerDiv.appendChild(label);
       return markerDiv;
     })
-    .htmlLat(d => d.lat)
-    .htmlLng(d => d.lng)
+    .htmlLat((d) => d.lat)
+    .htmlLng((d) => d.lng)
     .htmlAltitude(0.005);
 }
 
 // ---------------------------
 // Upload handler
 // ---------------------------
-uploadBtn?.addEventListener('click', async () => {
+uploadBtn?.addEventListener("click", async () => {
   const file = csvFile?.files?.[0];
   if (!file) {
-    statusMessage.className = 'mt-3 text-danger';
-    statusMessage.textContent = 'Please choose a CSV file first.';
+    statusMessage.className = "mt-3 text-danger";
+    statusMessage.textContent = "Please choose a CSV file first.";
     return;
   }
 
   uploadBtn.disabled = true;
-  loadingSpinner.style.display = 'inline-block';
-  statusMessage.className = 'mt-3 text-info';
-  statusMessage.textContent = 'Uploading and writing to database...';
+  loadingSpinner.style.display = "inline-block";
+  statusMessage.className = "mt-3 text-info";
+  statusMessage.textContent = "Uploading and writing to database...";
 
   await uploadCitiesFromCsv(file, (message, type) => {
     uploadBtn.disabled = false;
-    loadingSpinner.style.display = 'none';
+    loadingSpinner.style.display = "none";
 
     Swal.fire({
       icon: type,
-      title: type === 'success' ? 'Success!' : 'Notice',
-      text: message
+      title: type === "success" ? "Success!" : "Notice",
+      text: message,
     });
 
-    if (type === 'success') {
+    if (type === "success") {
       uploadModal.hide();
-      csvFile.value = '';
+      csvFile.value = "";
     }
   });
 });
@@ -225,13 +213,13 @@ uploadBtn?.addEventListener('click', async () => {
 // ---------------------------
 // Toggle pin write (admin-only)
 // ---------------------------
-togglePinBtn.addEventListener('click', async () => {
+togglePinBtn.addEventListener("click", async () => {
   if (!isLocal && !isAdminFlag) {
-    alert('You do not have permission to pin/unpin locations.');
+    alert("You do not have permission to pin/unpin locations.");
     return;
   }
   const docId = togglePinBtn.dataset.docId;
-  const currentStatus = togglePinBtn.dataset.currentStatus === 'true';
+  const currentStatus = togglePinBtn.dataset.currentStatus === "true";
 
   if (docId) {
     pinningModal.hide();
@@ -246,7 +234,7 @@ window.onload = () => {
   try {
     listenToCities((cities) => {
       allCities = cities;
-      const pinnedCities = allCities.filter(c => !!c.is_pinned);
+      const pinnedCities = allCities.filter((c) => !!c.is_pinned);
       renderGlobeMarkers(pinnedCities);
       console.log(`[SNAPSHOT] total=${allCities.length} pinned=${pinnedCities.length}`);
     });
@@ -264,15 +252,15 @@ window.onload = () => {
 // ---------------------------
 // Search (debounced) — dedupe & prefer pinned
 // ---------------------------
-searchInput.addEventListener('input', () => {
+searchInput.addEventListener("input", () => {
   clearTimeout(searchTimeout);
-  searchResultsList.style.display = 'none';
-  const q = (searchInput.value || '').toLowerCase().trim();
+  searchResultsList.style.display = "none";
+  const q = (searchInput.value || "").toLowerCase().trim();
   if (!q) return;
 
   searchTimeout = setTimeout(() => {
     try {
-      const matches = allCities.filter(c => (c.label || '').toLowerCase().includes(q));
+      const matches = allCities.filter((c) => (c.label || "").toLowerCase().includes(q));
       const byId = new Map();
       for (const m of matches) {
         const cid = canonicalIdOf(m);
@@ -291,29 +279,44 @@ searchInput.addEventListener('input', () => {
 
 function displaySearchResults(results) {
   try {
-    searchResultsList.innerHTML = '';
+    searchResultsList.innerHTML = "";
     if (results.length > 0) {
-      searchResultsList.style.display = 'block';
-      results.slice(0, 10).forEach(city => {
-        const li = document.createElement('li');
+      searchResultsList.style.display = "block";
+      results.slice(0, 10).forEach((city) => {
+        const li = document.createElement("li");
         li.textContent = city.label;
         li.onclick = () => {
-          world.pointOfView({ lat: city.lat, lng: city.lng, altitude: 0.5 }, 1000);
-          searchResultsList.style.display = 'none';
-          searchInput.value = '';
+          // Keep current altitude if NO_ZOOM so the globe doesn't appear to "zoom"
+          const currentPOV =
+            world.pointOfView && typeof world.pointOfView === "function"
+              ? world.pointOfView()
+              : { altitude: 0.5 };
+
+          world.pointOfView(
+            {
+              lat: city.lat,
+              lng: city.lng,
+              altitude: NO_ZOOM ? currentPOV.altitude : 0.5,
+            },
+            1000
+          );
+
+          searchResultsList.style.display = "none";
+          searchInput.value = "";
 
           if (!isLocal && !isAdminFlag) return;
 
           const target = pickTargetDoc(city, allCities);
           const isPinned = !!target.isPinned;
 
-          pinningModalLabel && (pinningModalLabel.textContent = 'Pin / Unpin Location');
-          pinningModalText.textContent =
-            `Do you want to toggle the pin status for ${city.label}? Current: ${isPinned ? 'Yes' : 'No'}.`;
+          pinningModalLabel && (pinningModalLabel.textContent = "Pin / Unpin Location");
+          pinningModalText.textContent = `Do you want to toggle the pin status for ${city.label}? Current: ${
+            isPinned ? "Yes" : "No"
+          }.`;
 
-          togglePinBtn.textContent = isPinned ? 'Unpin' : 'Pin';
-          togglePinBtn.classList.toggle('btn-danger', isPinned);
-          togglePinBtn.classList.toggle('btn-primary', !isPinned);
+          togglePinBtn.textContent = isPinned ? "Unpin" : "Pin";
+          togglePinBtn.classList.toggle("btn-danger", isPinned);
+          togglePinBtn.classList.toggle("btn-primary", !isPinned);
 
           togglePinBtn.dataset.docId = target.docId;
           togglePinBtn.dataset.currentStatus = String(isPinned);
@@ -323,7 +326,7 @@ function displaySearchResults(results) {
         searchResultsList.appendChild(li);
       });
     } else {
-      searchResultsList.style.display = 'none';
+      searchResultsList.style.display = "none";
     }
   } catch (error) {
     console.error("Error displaying search results:", error);
