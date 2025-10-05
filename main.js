@@ -81,7 +81,21 @@ const world = Globe()(globeContainer)
 
 world.controls().autoRotate = false;
 world.controls().autoRotateSpeed = 0.0;
+// NEW: read URL params to control interactions
+const urlParams = new URLSearchParams(location.search);
 
+// --- Option A: disable only ZOOM ---
+if (urlParams.has('nozoom') || urlParams.get('zoom') === '0') {
+  const ctrl = world.controls();
+  // turn off zoom gestures (wheel/pinch, etc.)
+  ctrl.enableZoom = false;
+
+  // hard-lock distance so programmatic zooms won’t change it
+  const cam = world.camera();
+  const currentDist = cam.position.length(); // distance from origin
+  ctrl.minDistance = currentDist;
+  ctrl.maxDistance = currentDist;
+}
 // --- Embed support (optional) ---
 const params = new URLSearchParams(location.search);
 const EMBED = params.has('embed') || params.get('bg') === 'transparent';
