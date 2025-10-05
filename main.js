@@ -78,11 +78,41 @@ const world = Globe()(globeContainer)
   .showGraticules(true)
   .showAtmosphere(true)
   .backgroundColor('#000011');
+// ---- Embed interaction switches ----
+const urlParams = new URLSearchParams(location.search);
+const NO_ZOOM = urlParams.has('nozoom') || urlParams.get('zoom') === '0';
+
+// keep autorotate off as you already have
+const ctrl = world.controls();
+
+if (NO_ZOOM) {
+  // 1) Turn off OrbitControls zoom
+  ctrl.enableZoom = false;
+
+  // 2) Lock distance so programmatic zooms won't change it
+  const cam = world.camera();
+  const dist = cam.position.length();
+  ctrl.minDistance = dist;
+  ctrl.maxDistance = dist;
+
+  // 3) Hard-stop wheel & pinch from the DOM side (prevents edge cases)
+  const dom = world.renderer().domElement;
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  dom.addEventListener('wheel', stop, { passive: false });
+  // block trackpad pinch-as-wheel and double-finger scroll on some browsers
+  dom.addEventListener('touchmove', (e) => {
+    if (e.touches && e.touches.length > 1) stop(e);
+  }, { passive: false });
+}
+
+// (Optional) keep rotate allowed, but you can block pan if you want later:
+// if (urlParams.has('nopan')) ctrl.enablePan = false;
+// if (urlParams.has('norotate')) ctrl.enableRotate = false;
 
 world.controls().autoRotate = false;
 world.controls().autoRotateSpeed = 0.0;
 // NEW: read URL params to control interactions
-const urlParams = new URLSearchParams(location.search);
+const urlparams = new URLSearchParams(location.search);
 
 // --- Option A: disable only ZOOM ---
 if (urlParams.has('nozoom') || urlParams.get('zoom') === '0') {
