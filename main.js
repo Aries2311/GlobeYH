@@ -10,6 +10,14 @@ import { addStars, setupComets } from "./background-effects.js";
 
 const ALWAYS_MANAGE_ON_SEARCH = true;
 
+// ---- query params / embed flags ----
+const urlParams = new URLSearchParams(location.search);
+const rawEmbed = (urlParams.get("embed") || "").toLowerCase();
+const EMBED = rawEmbed === "1" || rawEmbed === "true" || (rawEmbed !== "0" && rawEmbed !== "false" && rawEmbed !== "");
+if (EMBED) document.documentElement.classList.add("embed");
+const TRANSPARENT_BG = EMBED || urlParams.get("bg") === "transparent";
+const NO_ZOOM = urlParams.has("nozoom") || urlParams.get("zoom") === "0";
+
 // ---------- helpers ----------
 const slug = (s) =>
   (s || "").toString().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
@@ -38,8 +46,8 @@ const iconFor = (o) => ICONS[String(o.brand || "").toLowerCase()] || FED_ICON;
 
 // ---------- elements ----------
 const globeContainer = document.getElementById("globeViz");
-const uploadModal = new bootstrap.Modal(document.getElementById("uploadModal"));
-const pinningModal = new bootstrap.Modal(document.getElementById("pinningModal"));
+const uploadModal = document.getElementById("uploadModal") ? new bootstrap.Modal(document.getElementById("uploadModal")) : null;
+const pinningModal = document.getElementById("pinningModal") ? new bootstrap.Modal(document.getElementById("pinningModal")) : null;
 const searchInput = document.getElementById("search-input");
 const searchResultsList = document.getElementById("search-results");
 const pinningModalText = document.getElementById("pinningModalText");
@@ -76,7 +84,7 @@ let pendingCity = null;
 // ---------- admin gating ----------
 const isLocal = ["localhost","127.0.0.1","::1"].includes(location.hostname) || location.protocol === "file:";
 const isAdminFlag = localStorage.getItem("yh_admin") === "1";
-const canUpload = isLocal || isAdminFlag;
+const canUpload = (isLocal || isAdminFlag) && !EMBED; // never show upload sa EMBED
 const uploadGroup = document.getElementById("uploadControls") || uploadBtn?.parentElement;
 if (uploadGroup && !canUpload) uploadGroup.style.display = "none";
 
@@ -86,14 +94,15 @@ const world = Globe()(globeContainer)
   .bumpImageUrl("//unpkg.com/three-globe/example/img/earth-topology.png")
   .showGraticules(true)
   .showAtmosphere(true)
-  .backgroundColor("#000011");
+  .backgroundColor(TRANSPARENT_BG ? "rgba(0,0,0,0)" : "#000011");
 
-setTimeout(() => { try{addStars(world);}catch{} try{setupComets();}catch{} }, 600);
+// stars/comets only in full mode
+if (!EMBED) {
+  setTimeout(() => { try { addStars(world); } catch {} try { setupComets(); } catch {} }, 600);
+}
 
 // controls
 (world.controls().autoRotate = false), (world.controls().autoRotateSpeed = 0.0);
-const urlParams = new URLSearchParams(location.search);
-const NO_ZOOM = urlParams.has("nozoom") || urlParams.get("zoom") === "0";
 const ctrl = world.controls();
 if (NO_ZOOM) {
   ctrl.enableZoom = false;
@@ -108,7 +117,7 @@ togglePinBtn?.addEventListener("click", async () => {
   const docId = togglePinBtn.dataset.docId;
   const cur = togglePinBtn.dataset.currentStatus === "true";
   togglePinBtn.disabled = true;
-  try { await togglePinStatus(docId, cur); pinningModal.hide(); }
+  try { await togglePinStatus(docId, cur); pinningModal?.hide(); }
   catch (e) { Swal.fire({ icon:"error", title:"Oops", text: e?.message || "Failed to toggle pin." }); }
   finally { togglePinBtn.disabled = false; }
 });
@@ -121,27 +130,30 @@ const ensureHydratedAllCities = () => {
     allCities = cities; // no render here; pinned stream handles markers
   }); // default: full collection
 };
-searchInput?.addEventListener("focus", ensureHydratedAllCities);
-searchInput?.addEventListener("input", () => {
-  ensureHydratedAllCities(); // in case focus didn’t trigger
-  clearTimeout(searchTimeout);
-  const value = (searchInput.value || "").toLowerCase().trim();
-  if (!value) { searchResultsList.style.display = "none"; return; }
-  searchTimeout = setTimeout(() => {
-    const q = (searchInput.value || "").toLowerCase().trim(); if (!q) return;
-    const source = hydratedAll ? allCities : pinnedCities; // fallback habang hindi pa hydrated
-    const matches = source.filter((c) => (c.label || "").toLowerCase().includes(q));
-    const byId = new Map();
-    for (const m of matches) {
-      const cid = canonicalIdOf(m);
-      const existing = byId.get(cid);
-      if (!existing || (!!m.is_pinned && !existing.is_pinned)) byId.set(cid, m);
-    }
-    displaySearchResults(Array.from(byId.values()));
-  }, 220);
-});
+if (!EMBED) {
+  searchInput?.addEventListener("focus", ensureHydratedAllCities);
+  searchInput?.addEventListener("input", () => {
+    ensureHydratedAllCities(); // in case focus didn’t trigger
+    clearTimeout(searchTimeout);
+    const value = (searchInput.value || "").toLowerCase().trim();
+    if (!value) { searchResultsList.style.display = "none"; return; }
+    searchTimeout = setTimeout(() => {
+      const q = (searchInput.value || "").toLowerCase().trim(); if (!q) return;
+      const source = hydratedAll ? allCities : pinnedCities; // fallback habang hindi pa hydrated
+      const matches = source.filter((c) => (c.label || "").toLowerCase().includes(q));
+      const byId = new Map();
+      for (const m of matches) {
+        const cid = canonicalIdOf(m);
+        const existing = byId.get(cid);
+        if (!existing || (!!m.is_pinned && !existing.is_pinned)) byId.set(cid, m);
+      }
+      displaySearchResults(Array.from(byId.values()));
+    }, 220);
+  });
+}
 
 function displaySearchResults(results) {
+  if (EMBED) return;
   searchResultsList.innerHTML = "";
   if (!results?.length) { searchResultsList.style.display = "none"; return; }
   searchResultsList.style.display = "block";
@@ -189,7 +201,7 @@ function renderGlobeMarkers(data) {
         togglePinBtn.classList.toggle("btn-primary", !isPinned);
         togglePinBtn.dataset.docId = id;
         togglePinBtn.dataset.currentStatus = String(isPinned);
-        pinningModal.show();
+        pinningModal?.show();
       };
       const label = document.createElement("span");
       label.className = "marker-label";
@@ -231,16 +243,18 @@ document.getElementById("chooseFederationBtn")?.addEventListener("click", () => 
 document.getElementById("chooseUnpinBtn")?.addEventListener("click", unpinChosenCity);
 
 // ---------- upload ----------
-uploadBtn?.addEventListener("click", async () => {
-  const file = csvFile?.files?.[0];
-  if (!file) { statusMessage.className = "mt-3 text-danger"; statusMessage.textContent = "Please choose a CSV file first."; return; }
-  uploadBtn.disabled = true; loadingSpinner.style.display = "inline-block";
-  statusMessage.className = "mt-3 text-info"; statusMessage.textContent = "Uploading and writing to database...";
-  await uploadCitiesFromCsv(file, (message, type) => {
-    uploadBtn.disabled = false; loadingSpinner.style.display = "none";
-    Swal.fire({ icon: type, title: type === "success" ? "Success!" : "Notice", text: message || "Done.", confirmButtonText: "OK", heightAuto: false });
+if (uploadBtn && !EMBED) {
+  uploadBtn.addEventListener("click", async () => {
+    const file = csvFile?.files?.[0];
+    if (!file) { statusMessage.className = "mt-3 text-danger"; statusMessage.textContent = "Please choose a CSV file first."; return; }
+    uploadBtn.disabled = true; loadingSpinner.style.display = "inline-block";
+    statusMessage.className = "mt-3 text-info"; statusMessage.textContent = "Uploading and writing to database...";
+    await uploadCitiesFromCsv(file, (message, type) => {
+      uploadBtn.disabled = false; loadingSpinner.style.display = "none";
+      Swal.fire({ icon: type, title: type === "success" ? "Success!" : "Notice", text: message || "Done.", confirmButtonText: "OK", heightAuto: false });
+    });
   });
-});
+}
 
 // ---------- realtime ----------
 window.onload = () => {
@@ -251,10 +265,17 @@ window.onload = () => {
     console.log(`[SNAPSHOT] pinned=${pinnedCities.length}`);
   }, { onlyPinned: true });                    // <-- key change (fast)
 };
-// hide search UI for viewers (non-admin)
+
+// hide search UI for viewers or EMBED
 const searchContainer = document.querySelector(".search-bar-container");
-if (searchContainer && !canUpload) {
+if (searchContainer && (EMBED || !canUpload)) {
   searchContainer.style.display = "none";
   const sr = document.getElementById("search-results");
   if (sr) sr.style.display = "none";
+}
+
+// extra: hide the whole UI container if EMBED (CSS already does this; JS is fallback)
+if (EMBED) {
+  const ui = document.querySelector(".ui-container");
+  if (ui) ui.style.display = "none";
 }
