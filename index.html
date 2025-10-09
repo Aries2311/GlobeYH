@@ -41,6 +41,15 @@
     .comet { position:fixed; width:2px; height:2px; background:#fff; border-radius:50%; box-shadow:0 0 5px rgba(255,255,255,0.8), 0 0 15px #a0ffff; z-index:1; pointer-events:none; opacity:0; transform:translate(var(--start-x), var(--start-y)); animation:comet-fly var(--duration) linear var(--delay) infinite; }
     .comet::before { content:''; position:absolute; top:50%; left:50%; width:150px; height:1px; background:linear-gradient(to right, rgba(255,255,255,0), rgba(160,255,255,0.8)); transform:translate(-100%,-50%) rotate(45deg); transform-origin:100% 50%; opacity:0.6; }
     @keyframes comet-fly { 0%{ transform:translate(var(--start-x), var(--start-y)); opacity:0; } 5%{ opacity:1; } 95%{ opacity:1; } 100%{ transform:translate(var(--end-x), var(--end-y)); opacity:0; } }
+
+    /* ===== EMBED MODE: globe-only, transparent background ===== */
+    html.embed body { background: transparent !important; }
+    html.embed #globeViz { background: transparent !important; }
+    html.embed .ui-container,
+    html.embed .modal,
+    html.embed #uploadControls,
+    html.embed #search-results { display: none !important; }
+    html.embed .comet { display: none !important; }
   </style>
 </head>
 <body>
@@ -60,6 +69,7 @@
     </div>
   </div>
 
+  <!-- Upload CSV Modal -->
   <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -81,6 +91,7 @@
     </div>
   </div>
 
+  <!-- Pin Modal -->
   <div class="modal fade" id="pinningModal" tabindex="-1" aria-labelledby="pinningModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -99,7 +110,7 @@
     </div>
   </div>
 
-  <!-- Single, de-duplicated Choose Brand Modal -->
+  <!-- Choose Brand Modal -->
   <div class="modal fade" id="brandModal" tabindex="-1" aria-labelledby="brandModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -126,6 +137,6 @@
 
   <script type="module" src="./firebase.js"></script>
   <script type="module" src="./main.js"></script>
-  <!-- Huwag nang i-load ang background-effects.js dito; ini-import na siya sa main.js -->
+  <!-- background-effects.js is imported inside main.js -->
 </body>
 </html>
