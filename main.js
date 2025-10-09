@@ -13,23 +13,33 @@ const ALWAYS_MANAGE_ON_SEARCH = true;
 // ---- query params / embed flags ----
 const urlParams = new URLSearchParams(location.search);
 const rawEmbed = (urlParams.get("embed") || "").toLowerCase();
-const EMBED = rawEmbed === "1" || rawEmbed === "true" || (rawEmbed !== "0" && rawEmbed !== "false" && rawEmbed !== "");
+const EMBED =
+  rawEmbed === "1" ||
+  rawEmbed === "true" ||
+  (rawEmbed !== "0" && rawEmbed !== "false" && rawEmbed !== "");
 if (EMBED) document.documentElement.classList.add("embed");
 const TRANSPARENT_BG = EMBED || urlParams.get("bg") === "transparent";
 const NO_ZOOM = urlParams.has("nozoom") || urlParams.get("zoom") === "0";
 
 // ---------- helpers ----------
 const slug = (s) =>
-  (s || "").toString().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase();
+  (s || "")
+    .toString()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
 const canonicalIdOf = (o) =>
-  `${slug((o.city || o.label || "").split(",")[0])}_${Number(o.lat).toFixed(4)}_${Number(o.lng).toFixed(4)}`;
+  `${slug((o.city || o.label || "").split(",")[0])}_${Number(o.lat).toFixed(
+    4
+  )}_${Number(o.lng).toFixed(4)}`;
 
-let allCities = [];         // full list (hydrated on demand)
-let pinnedCities = [];      // current pinned
+let allCities = []; // full list (hydrated on demand)
+let pinnedCities = []; // current pinned
 let searchTimeout;
-let unsubAll = null;        // listener for ALL cities (lazy)
-let hydratedAll = false;    // flag para hindi paulit-ulit
+let unsubAll = null; // listener for ALL cities (lazy)
+let hydratedAll = false; // flag para hindi paulit-ulit
 
 // ---------- icons & display ----------
 const FED_ICON = "./assets/my-logo.png";
@@ -46,8 +56,12 @@ const iconFor = (o) => ICONS[String(o.brand || "").toLowerCase()] || FED_ICON;
 
 // ---------- elements ----------
 const globeContainer = document.getElementById("globeViz");
-const uploadModal = document.getElementById("uploadModal") ? new bootstrap.Modal(document.getElementById("uploadModal")) : null;
-const pinningModal = document.getElementById("pinningModal") ? new bootstrap.Modal(document.getElementById("pinningModal")) : null;
+const uploadModal = document.getElementById("uploadModal")
+  ? new bootstrap.Modal(document.getElementById("uploadModal"))
+  : null;
+const pinningModal = document.getElementById("pinningModal")
+  ? new bootstrap.Modal(document.getElementById("pinningModal"))
+  : null;
 const searchInput = document.getElementById("search-input");
 const searchResultsList = document.getElementById("search-results");
 const pinningModalText = document.getElementById("pinningModalText");
@@ -82,23 +96,51 @@ if (brandModalEl && !chooseUnpinBtn) {
 let pendingCity = null;
 
 // ---------- admin gating ----------
-const isLocal = ["localhost","127.0.0.1","::1"].includes(location.hostname) || location.protocol === "file:";
+const isLocal =
+  ["localhost", "127.0.0.1", "::1"].includes(location.hostname) ||
+  location.protocol === "file:";
 const isAdminFlag = localStorage.getItem("yh_admin") === "1";
 const canUpload = (isLocal || isAdminFlag) && !EMBED; // never show upload sa EMBED
-const uploadGroup = document.getElementById("uploadControls") || uploadBtn?.parentElement;
+const uploadGroup =
+  document.getElementById("uploadControls") || uploadBtn?.parentElement;
 if (uploadGroup && !canUpload) uploadGroup.style.display = "none";
 
 // ---------- globe ----------
+// HUWAG gagamit ng .backgroundColor() dito; gagawin nating manual ang transparency
 const world = Globe()(globeContainer)
   .globeImageUrl("//unpkg.com/three-globe/example/img/earth-day.jpg")
   .bumpImageUrl("//unpkg.com/three-globe/example/img/earth-topology.png")
   .showGraticules(true)
-  .showAtmosphere(true)
-  .backgroundColor(TRANSPARENT_BG ? "rgba(0,0,0,0)" : "#000011");
+  .showAtmosphere(true);
+
+// Force true transparency kapag embed/transparent mode
+if (TRANSPARENT_BG) {
+  try {
+    // tanggalin ang scene background
+    world.scene().background = null;
+
+    // gawing transparent ang WebGL clear
+    const r = world.renderer();
+    r.setClearColor(0x000000, 0); // alpha = 0
+    r.setClearAlpha(0);
+
+    // siguraduhin na walang kulay ang mga container
+    globeContainer.style.background = "transparent";
+    document.body.style.background = "transparent";
+  } catch (e) {
+    // ignore
+  }
+} else {
+  // normal (non-embed) page: dark space bg
+  world.backgroundColor("#000011");
+}
 
 // stars/comets only in full mode
 if (!EMBED) {
-  setTimeout(() => { try { addStars(world); } catch {} try { setupComets(); } catch {} }, 600);
+  setTimeout(() => {
+    try { addStars(world); } catch {}
+    try { setupComets(); } catch {}
+  }, 600);
 }
 
 // controls
@@ -106,10 +148,21 @@ if (!EMBED) {
 const ctrl = world.controls();
 if (NO_ZOOM) {
   ctrl.enableZoom = false;
-  const cam = world.camera(); const dist = cam.position.length();
-  ctrl.minDistance = dist; ctrl.maxDistance = dist;
+  const cam = world.camera();
+  const dist = cam.position.length();
+  ctrl.minDistance = dist;
+  ctrl.maxDistance = dist;
   const dom = world.renderer().domElement;
-  dom.addEventListener("touchmove",(e)=>{if(e.touches?.length>=2){e.preventDefault();e.stopPropagation();}},{passive:false});
+  dom.addEventListener(
+    "touchmove",
+    (e) => {
+      if (e.touches?.length >= 2) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    { passive: false }
+  );
 }
 
 // ---------- pin modal ----------
@@ -117,9 +170,14 @@ togglePinBtn?.addEventListener("click", async () => {
   const docId = togglePinBtn.dataset.docId;
   const cur = togglePinBtn.dataset.currentStatus === "true";
   togglePinBtn.disabled = true;
-  try { await togglePinStatus(docId, cur); pinningModal?.hide(); }
-  catch (e) { Swal.fire({ icon:"error", title:"Oops", text: e?.message || "Failed to toggle pin." }); }
-  finally { togglePinBtn.disabled = false; }
+  try {
+    await togglePinStatus(docId, cur);
+    pinningModal?.hide();
+  } catch (e) {
+    Swal.fire({ icon: "error", title: "Oops", text: e?.message || "Failed to toggle pin." });
+  } finally {
+    togglePinBtn.disabled = false;
+  }
 });
 
 // ---------- search (lazy-hydrate ALL cities on first intent) ----------
@@ -136,9 +194,13 @@ if (!EMBED) {
     ensureHydratedAllCities(); // in case focus didn’t trigger
     clearTimeout(searchTimeout);
     const value = (searchInput.value || "").toLowerCase().trim();
-    if (!value) { searchResultsList.style.display = "none"; return; }
+    if (!value) {
+      searchResultsList.style.display = "none";
+      return;
+    }
     searchTimeout = setTimeout(() => {
-      const q = (searchInput.value || "").toLowerCase().trim(); if (!q) return;
+      const q = (searchInput.value || "").toLowerCase().trim();
+      if (!q) return;
       const source = hydratedAll ? allCities : pinnedCities; // fallback habang hindi pa hydrated
       const matches = source.filter((c) => (c.label || "").toLowerCase().includes(q));
       const byId = new Map();
@@ -155,14 +217,20 @@ if (!EMBED) {
 function displaySearchResults(results) {
   if (EMBED) return;
   searchResultsList.innerHTML = "";
-  if (!results?.length) { searchResultsList.style.display = "none"; return; }
+  if (!results?.length) {
+    searchResultsList.style.display = "none";
+    return;
+  }
   searchResultsList.style.display = "block";
   results.slice(0, 10).forEach((city) => {
     const li = document.createElement("li");
     li.textContent = displayNameFor(city);
     li.onclick = () => {
       const currentPOV = world.pointOfView ? world.pointOfView() : { altitude: 0.5 };
-      world.pointOfView({ lat: city.lat, lng: city.lng, altitude: NO_ZOOM ? currentPOV.altitude : 0.5 }, 1000);
+      world.pointOfView(
+        { lat: city.lat, lng: city.lng, altitude: NO_ZOOM ? currentPOV.altitude : 0.5 },
+        1000
+      );
       searchResultsList.style.display = "none";
       searchInput.value = "";
 
@@ -195,7 +263,9 @@ function renderGlobeMarkers(data) {
         const id = canonicalIdOf(d);
         const isPinned = !!d.is_pinned;
         pinningModalLabel && (pinningModalLabel.textContent = "Pin / Unpin Location");
-        pinningModalText.textContent = `Do you want to toggle the pin status for ${displayNameFor(d)}? Current: ${isPinned ? "Yes" : "No"}`;
+        pinningModalText.textContent = `Do you want to toggle the pin status for ${displayNameFor(
+          d
+        )}? Current: ${isPinned ? "Yes" : "No"}`;
         togglePinBtn.textContent = isPinned ? "Unpin" : "Pin";
         togglePinBtn.classList.toggle("btn-danger", isPinned);
         togglePinBtn.classList.toggle("btn-primary", !isPinned);
@@ -221,12 +291,21 @@ async function applyBrandChoice(brand, cityObj = null) {
     const c = cityObj || pendingCity;
     if (!c) return;
     const docId = c.id || canonicalIdOf(c);
-    if (!c.is_pinned) { await setCityBrandAndPin(docId, brand, true); }
-    else { await setCityBrand(docId, brand); }
+    if (!c.is_pinned) {
+      await setCityBrandAndPin(docId, brand, true);
+    } else {
+      await setCityBrand(docId, brand);
+    }
     brandModal && brandModal.hide();
   } catch (e) {
-    Swal.fire({ icon: "error", title: "Oops", text: e?.message || e?.code || "Failed to set brand." });
-  } finally { pendingCity = null; }
+    Swal.fire({
+      icon: "error",
+      title: "Oops",
+      text: e?.message || e?.code || "Failed to set brand.",
+    });
+  } finally {
+    pendingCity = null;
+  }
 }
 async function unpinChosenCity() {
   try {
@@ -235,23 +314,46 @@ async function unpinChosenCity() {
     await setPinStatus(docId, false);
     brandModal && brandModal.hide();
   } catch (e) {
-    Swal.fire({ icon: "error", title: "Oops", text: e?.message || e?.code || "Failed to unpin." });
-  } finally { pendingCity = null; }
+    Swal.fire({
+      icon: "error",
+      title: "Oops",
+      text: e?.message || e?.code || "Failed to unpin.",
+    });
+  } finally {
+    pendingCity = null;
+  }
 }
-document.getElementById("chooseAcademyBtn")?.addEventListener("click", () => applyBrandChoice("academy"));
-document.getElementById("chooseFederationBtn")?.addEventListener("click", () => applyBrandChoice("federation"));
+document.getElementById("chooseAcademyBtn")?.addEventListener("click", () =>
+  applyBrandChoice("academy")
+);
+document.getElementById("chooseFederationBtn")?.addEventListener("click", () =>
+  applyBrandChoice("federation")
+);
 document.getElementById("chooseUnpinBtn")?.addEventListener("click", unpinChosenCity);
 
 // ---------- upload ----------
 if (uploadBtn && !EMBED) {
   uploadBtn.addEventListener("click", async () => {
     const file = csvFile?.files?.[0];
-    if (!file) { statusMessage.className = "mt-3 text-danger"; statusMessage.textContent = "Please choose a CSV file first."; return; }
-    uploadBtn.disabled = true; loadingSpinner.style.display = "inline-block";
-    statusMessage.className = "mt-3 text-info"; statusMessage.textContent = "Uploading and writing to database...";
+    if (!file) {
+      statusMessage.className = "mt-3 text-danger";
+      statusMessage.textContent = "Please choose a CSV file first.";
+      return;
+    }
+    uploadBtn.disabled = true;
+    loadingSpinner.style.display = "inline-block";
+    statusMessage.className = "mt-3 text-info";
+    statusMessage.textContent = "Uploading and writing to database...";
     await uploadCitiesFromCsv(file, (message, type) => {
-      uploadBtn.disabled = false; loadingSpinner.style.display = "none";
-      Swal.fire({ icon: type, title: type === "success" ? "Success!" : "Notice", text: message || "Done.", confirmButtonText: "OK", heightAuto: false });
+      uploadBtn.disabled = false;
+      loadingSpinner.style.display = "none";
+      Swal.fire({
+        icon: type,
+        title: type === "success" ? "Success!" : "Notice",
+        text: message || "Done.",
+        confirmButtonText: "OK",
+        heightAuto: false,
+      });
     });
   });
 }
@@ -259,11 +361,14 @@ if (uploadBtn && !EMBED) {
 // ---------- realtime ----------
 window.onload = () => {
   // FAST PATH: subscribe to pinned only for first render
-  listenToCities((cities) => {
-    pinnedCities = cities;                     // keep a fast, small set for UI
-    renderGlobeMarkers(pinnedCities);
-    console.log(`[SNAPSHOT] pinned=${pinnedCities.length}`);
-  }, { onlyPinned: true });                    // <-- key change (fast)
+  listenToCities(
+    (cities) => {
+      pinnedCities = cities; // keep a fast, small set for UI
+      renderGlobeMarkers(pinnedCities);
+      console.log(`[SNAPSHOT] pinned=${pinnedCities.length}`);
+    },
+    { onlyPinned: true } // <-- key change (fast)
+  );
 };
 
 // hide search UI for viewers or EMBED
