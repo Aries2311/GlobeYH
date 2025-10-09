@@ -251,3 +251,10 @@ window.onload = () => {
     console.log(`[SNAPSHOT] pinned=${pinnedCities.length}`);
   }, { onlyPinned: true });                    // <-- key change (fast)
 };
+// hide search UI for viewers (non-admin)
+const searchContainer = document.querySelector(".search-bar-container");
+if (searchContainer && !canUpload) {
+  searchContainer.style.display = "none";
+  const sr = document.getElementById("search-results");
+  if (sr) sr.style.display = "none";
+}
