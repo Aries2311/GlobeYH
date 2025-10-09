@@ -8,90 +8,22 @@ import {
 } from "./firebase.js";
 import { addStars, setupComets } from "./background-effects.js";
 
-/* =========================
-   CONFIG
-   ========================= */
-// Eksaktong GitHub Pages host mo
-const DOMAIN_WHITELIST = [
-  "aries2311.github.io"
-];
+const ALWAYS_MANAGE_ON_SEARCH = true;
 
-// Project path sa GitHub Pages (dahil repo mo ay "GlobeYH")
-const PATH_WHITELIST = [
-  "/GlobeYH", "/GlobeYH/"
-];
-
-// Dev convenience: payagan full manage sa localhost
-const DEV_ALLOW_LOCALHOST = true;
-
-/* =========================
-   ADMIN + DOMAIN/PATH GATING
-   ========================= */
-let IS_ADMIN = false;
-let CAN_MANAGE = false; // final: puwedeng mag-search/pin/unpin/brand/upload
-
-function computeHostGating() {
-  const host = location.hostname.toLowerCase();
-  const path = location.pathname || "/";
-  const isWhitelistedHost = DOMAIN_WHITELIST.some(h =>
-    host === h.toLowerCase() || host.endsWith("." + h.toLowerCase())
-  );
-  const isWhitelistedPath = PATH_WHITELIST.length
-    ? PATH_WHITELIST.some(p => path === p || path.startsWith(p))
-    : true;
-
-  const isLocal = ["localhost","127.0.0.1","::1"].includes(host) || location.protocol === "file:";
-  // ✅ Manage only kung (GitHub Pages host + tamang project path + admin) OR (localhost dev)
-  CAN_MANAGE = (isWhitelistedHost && isWhitelistedPath && IS_ADMIN) || (isLocal && DEV_ALLOW_LOCALHOST);
-
-  console.log("[GATING]", { host, path, IS_ADMIN, CAN_MANAGE, isWhitelistedHost, isWhitelistedPath });
-}
-
-async function resolveAdmin() {
-  try {
-    const { getAuth, onAuthStateChanged } = await import("https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js");
-    const auth = getAuth();
-    onAuthStateChanged(auth, async (user) => {
-      try {
-        const devOverride = localStorage.getItem("yh_admin") === "1"; // dev only
-        if (!user) {
-          IS_ADMIN = devOverride; // not signed in
-        } else {
-          const token = await user.getIdTokenResult();
-          IS_ADMIN = !!token.claims?.admin || devOverride;
-        }
-      } catch {
-        IS_ADMIN = localStorage.getItem("yh_admin") === "1";
-      }
-      computeHostGating();
-      applyAdminUI();
-    });
-  } catch {
-    // No Auth loaded; fallback
-    IS_ADMIN = localStorage.getItem("yh_admin") === "1";
-    computeHostGating();
-    applyAdminUI();
-  }
-}
-
-/* =========================
-   HELPERS & STATE
-   ========================= */
+// ---------- helpers ----------
 const slug = (s) =>
-  (s || "")
-    .toString().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+  (s || "").toString().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase();
-
 const canonicalIdOf = (o) =>
   `${slug((o.city || o.label || "").split(",")[0])}_${Number(o.lat).toFixed(4)}_${Number(o.lng).toFixed(4)}`;
 
-let allCities = [];    // full set (for search; lazy-hydrated)
-let pinnedCities = []; // rendered set
+let allCities = [];         // full list (hydrated on demand)
+let pinnedCities = [];      // current pinned
 let searchTimeout;
-let hydratedAll = false;
-let pendingCity = null; // <-- moved earlier to avoid TDZ confusion
+let unsubAll = null;        // listener for ALL cities (lazy)
+let hydratedAll = false;    // flag para hindi paulit-ulit
 
-// Icons & display
+// ---------- icons & display ----------
 const FED_ICON = "./assets/my-logo.png";
 const ACAD_ICON = "./assets/academy-logo.png";
 const ICONS = { federation: FED_ICON, academy: ACAD_ICON };
@@ -104,13 +36,10 @@ const displayNameFor = (o) => {
 };
 const iconFor = (o) => ICONS[String(o.brand || "").toLowerCase()] || FED_ICON;
 
-/* =========================
-   DOM ELEMENTS
-   ========================= */
+// ---------- elements ----------
 const globeContainer = document.getElementById("globeViz");
 const uploadModal = new bootstrap.Modal(document.getElementById("uploadModal"));
 const pinningModal = new bootstrap.Modal(document.getElementById("pinningModal"));
-
 const searchInput = document.getElementById("search-input");
 const searchResultsList = document.getElementById("search-results");
 const pinningModalText = document.getElementById("pinningModalText");
@@ -120,7 +49,6 @@ const uploadBtn = document.getElementById("uploadBtn");
 const loadingSpinner = document.getElementById("loading-spinner");
 const statusMessage = document.getElementById("statusMessage");
 const csvFile = document.getElementById("csvFile");
-
 const brandModalEl = document.getElementById("brandModal");
 const brandModal = brandModalEl ? new bootstrap.Modal(brandModalEl) : null;
 const brandModalText = document.getElementById("brandModalText");
@@ -128,7 +56,7 @@ let chooseFederationBtn = document.getElementById("chooseFederationBtn");
 let chooseAcademyBtn = document.getElementById("chooseAcademyBtn");
 let chooseUnpinBtn = document.getElementById("chooseUnpinBtn");
 
-// Auto-create Unpin if missing (harmless for viewers)
+// auto-create Unpin button if missing
 if (brandModalEl && !chooseUnpinBtn) {
   const footer = brandModalEl.querySelector(".modal-footer");
   if (footer) {
@@ -143,30 +71,16 @@ if (brandModalEl && !chooseUnpinBtn) {
   }
 }
 
-/* =========================
-   ADMIN / VIEWER UI
-   ========================= */
-function applyAdminUI() {
-  // Show/Hide Upload controls
-  const uploadGroup = document.getElementById("uploadControls") || uploadBtn?.parentElement;
-  if (uploadGroup) uploadGroup.style.display = CAN_MANAGE ? "block" : "none";
+let pendingCity = null;
 
-  // Show/Hide search UI for viewers (READ-ONLY site => hide search entirely)
-  const searchBar = document.querySelector(".search-bar-container");
-  if (searchBar) searchBar.style.display = CAN_MANAGE ? "flex" : "none";
+// ---------- admin gating ----------
+const isLocal = ["localhost","127.0.0.1","::1"].includes(location.hostname) || location.protocol === "file:";
+const isAdminFlag = localStorage.getItem("yh_admin") === "1";
+const canUpload = isLocal || isAdminFlag;
+const uploadGroup = document.getElementById("uploadControls") || uploadBtn?.parentElement;
+if (uploadGroup && !canUpload) uploadGroup.style.display = "none";
 
-  // Optional: lock globe for viewers (uncomment if gusto mong frozen ang globe sa viewers)
-  // if (!CAN_MANAGE) {
-  //   const c = world.controls();
-  //   c.enablePan = false;
-  //   c.enableZoom = true;   // set to false kung gusto mo walang zoom
-  //   c.enableRotate = true; // set to false kung gusto mo totally static
-  // }
-}
-
-/* =========================
-   GLOBE INIT
-   ========================= */
+// ---------- globe ----------
 const world = Globe()(globeContainer)
   .globeImageUrl("//unpkg.com/three-globe/example/img/earth-day.jpg")
   .bumpImageUrl("//unpkg.com/three-globe/example/img/earth-topology.png")
@@ -176,7 +90,7 @@ const world = Globe()(globeContainer)
 
 setTimeout(() => { try{addStars(world);}catch{} try{setupComets();}catch{} }, 600);
 
-// Controls & URL flag
+// controls
 (world.controls().autoRotate = false), (world.controls().autoRotateSpeed = 0.0);
 const urlParams = new URLSearchParams(location.search);
 const NO_ZOOM = urlParams.has("nozoom") || urlParams.get("zoom") === "0";
@@ -189,11 +103,8 @@ if (NO_ZOOM) {
   dom.addEventListener("touchmove",(e)=>{if(e.touches?.length>=2){e.preventDefault();e.stopPropagation();}},{passive:false});
 }
 
-/* =========================
-   PIN MODAL (CAN_MANAGE only)
-   ========================= */
+// ---------- pin modal ----------
 togglePinBtn?.addEventListener("click", async () => {
-  if (!CAN_MANAGE) return;
   const docId = togglePinBtn.dataset.docId;
   const cur = togglePinBtn.dataset.currentStatus === "true";
   togglePinBtn.disabled = true;
@@ -202,40 +113,35 @@ togglePinBtn?.addEventListener("click", async () => {
   finally { togglePinBtn.disabled = false; }
 });
 
-/* =========================
-   SEARCH (only when CAN_MANAGE)
-   ========================= */
+// ---------- search (lazy-hydrate ALL cities on first intent) ----------
 const ensureHydratedAllCities = () => {
   if (hydratedAll) return;
   hydratedAll = true;
-  listenToCities((cities) => { allCities = cities; }); // full set for search only
+  unsubAll = listenToCities((cities) => {
+    allCities = cities; // no render here; pinned stream handles markers
+  }); // default: full collection
 };
-
-if (searchInput) {
-  searchInput.addEventListener("focus", () => { if (CAN_MANAGE) ensureHydratedAllCities(); });
-  searchInput.addEventListener("input", () => {
-    if (!CAN_MANAGE) return;
-    ensureHydratedAllCities();
-    clearTimeout(searchTimeout);
-    const value = (searchInput.value || "").toLowerCase().trim();
-    if (!value) { searchResultsList.style.display = "none"; return; }
-    searchTimeout = setTimeout(() => {
-      const q = (searchInput.value || "").toLowerCase().trim(); if (!q) return;
-      const source = hydratedAll ? allCities : pinnedCities;
-      const matches = source.filter((c) => (c.label || "").toLowerCase().includes(q));
-      const byId = new Map();
-      for (const m of matches) {
-        const cid = canonicalIdOf(m);
-        const existing = byId.get(cid);
-        if (!existing || (!!m.is_pinned && !existing.is_pinned)) byId.set(cid, m);
-      }
-      displaySearchResults(Array.from(byId.values()));
-    }, 220);
-  });
-}
+searchInput?.addEventListener("focus", ensureHydratedAllCities);
+searchInput?.addEventListener("input", () => {
+  ensureHydratedAllCities(); // in case focus didn’t trigger
+  clearTimeout(searchTimeout);
+  const value = (searchInput.value || "").toLowerCase().trim();
+  if (!value) { searchResultsList.style.display = "none"; return; }
+  searchTimeout = setTimeout(() => {
+    const q = (searchInput.value || "").toLowerCase().trim(); if (!q) return;
+    const source = hydratedAll ? allCities : pinnedCities; // fallback habang hindi pa hydrated
+    const matches = source.filter((c) => (c.label || "").toLowerCase().includes(q));
+    const byId = new Map();
+    for (const m of matches) {
+      const cid = canonicalIdOf(m);
+      const existing = byId.get(cid);
+      if (!existing || (!!m.is_pinned && !existing.is_pinned)) byId.set(cid, m);
+    }
+    displaySearchResults(Array.from(byId.values()));
+  }, 220);
+});
 
 function displaySearchResults(results) {
-  if (!CAN_MANAGE) return;
   searchResultsList.innerHTML = "";
   if (!results?.length) { searchResultsList.style.display = "none"; return; }
   searchResultsList.style.display = "block";
@@ -248,13 +154,12 @@ function displaySearchResults(results) {
       searchResultsList.style.display = "none";
       searchInput.value = "";
 
-      // Manage modal (brand/unpin) — only for CAN_MANAGE
-      if (brandModal && CAN_MANAGE) {
+      if (brandModal && ALWAYS_MANAGE_ON_SEARCH) {
+        pendingCity = city;
         const base = (city.label || "").split(",")[0].trim();
+        brandModalText && (brandModalText.textContent = `Manage “${base}”: choose brand or unpin.`);
         const unpinBtn = document.getElementById("chooseUnpinBtn");
         if (unpinBtn) unpinBtn.style.display = city.is_pinned ? "inline-block" : "none";
-        brandModalText && (brandModalText.textContent = `Manage “${base}”: choose brand or unpin.`);
-        pendingCity = city;
         brandModal.show();
       }
     };
@@ -262,9 +167,7 @@ function displaySearchResults(results) {
   });
 }
 
-/* =========================
-   RENDER (pinned only)
-   ========================= */
+// ---------- render (pinned only) ----------
 function renderGlobeMarkers(data) {
   world
     .htmlElementsData(data)
@@ -274,15 +177,13 @@ function renderGlobeMarkers(data) {
       const img = document.createElement("img");
       img.className = "marker-icon";
       img.src = iconFor(d);
-
       img.onclick = (e) => {
         e.stopPropagation();
-        if (!CAN_MANAGE) return; // viewers: do nothing
+        if (!isLocal && !isAdminFlag) return;
         const id = canonicalIdOf(d);
         const isPinned = !!d.is_pinned;
         pinningModalLabel && (pinningModalLabel.textContent = "Pin / Unpin Location");
-        pinningModalText.textContent =
-          `Do you want to toggle the pin status for ${displayNameFor(d)}? Current: ${isPinned ? "Yes" : "No"}`;
+        pinningModalText.textContent = `Do you want to toggle the pin status for ${displayNameFor(d)}? Current: ${isPinned ? "Yes" : "No"}`;
         togglePinBtn.textContent = isPinned ? "Unpin" : "Pin";
         togglePinBtn.classList.toggle("btn-danger", isPinned);
         togglePinBtn.classList.toggle("btn-primary", !isPinned);
@@ -290,11 +191,9 @@ function renderGlobeMarkers(data) {
         togglePinBtn.dataset.currentStatus = String(isPinned);
         pinningModal.show();
       };
-
       const label = document.createElement("span");
       label.className = "marker-label";
       label.textContent = displayNameFor(d);
-
       wrap.appendChild(img);
       wrap.appendChild(label);
       return wrap;
@@ -304,24 +203,20 @@ function renderGlobeMarkers(data) {
     .htmlAltitude(0.005);
 }
 
-/* =========================
-   BRAND / UNPIN (CAN_MANAGE only)
-   ========================= */
+// ---------- brand/unpin actions ----------
 async function applyBrandChoice(brand, cityObj = null) {
-  if (!CAN_MANAGE) return;
   try {
     const c = cityObj || pendingCity;
     if (!c) return;
     const docId = c.id || canonicalIdOf(c);
-    if (!c.is_pinned) await setCityBrandAndPin(docId, brand, true);
-    else await setCityBrand(docId, brand);
+    if (!c.is_pinned) { await setCityBrandAndPin(docId, brand, true); }
+    else { await setCityBrand(docId, brand); }
     brandModal && brandModal.hide();
   } catch (e) {
     Swal.fire({ icon: "error", title: "Oops", text: e?.message || e?.code || "Failed to set brand." });
   } finally { pendingCity = null; }
 }
 async function unpinChosenCity() {
-  if (!CAN_MANAGE) return;
   try {
     if (!pendingCity) return;
     const docId = pendingCity.id || canonicalIdOf(pendingCity);
@@ -335,11 +230,8 @@ document.getElementById("chooseAcademyBtn")?.addEventListener("click", () => app
 document.getElementById("chooseFederationBtn")?.addEventListener("click", () => applyBrandChoice("federation"));
 document.getElementById("chooseUnpinBtn")?.addEventListener("click", unpinChosenCity);
 
-/* =========================
-   UPLOAD (CAN_MANAGE only)
-   ========================= */
+// ---------- upload ----------
 uploadBtn?.addEventListener("click", async () => {
-  if (!CAN_MANAGE) return;
   const file = csvFile?.files?.[0];
   if (!file) { statusMessage.className = "mt-3 text-danger"; statusMessage.textContent = "Please choose a CSV file first."; return; }
   uploadBtn.disabled = true; loadingSpinner.style.display = "inline-block";
@@ -350,17 +242,12 @@ uploadBtn?.addEventListener("click", async () => {
   });
 });
 
-/* =========================
-   REALTIME
-   ========================= */
+// ---------- realtime ----------
 window.onload = () => {
-  computeHostGating();  // set host/path flags asap
-  resolveAdmin();       // then compute admin + finalize CAN_MANAGE
-
-  // Fast first paint: pinned-only render
+  // FAST PATH: subscribe to pinned only for first render
   listenToCities((cities) => {
-    pinnedCities = cities;
+    pinnedCities = cities;                     // keep a fast, small set for UI
     renderGlobeMarkers(pinnedCities);
     console.log(`[SNAPSHOT] pinned=${pinnedCities.length}`);
-  }, { onlyPinned: true });
+  }, { onlyPinned: true });                    // <-- key change (fast)
 };
