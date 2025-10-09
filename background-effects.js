@@ -10,7 +10,8 @@ export function addStars(world) {
     return;
   }
 
-  const starCount = 5000;
+  // Lighter first paint
+  const starCount = 1500;
   const starGeo = new THREE.BufferGeometry();
   const positions = [];
 
@@ -20,8 +21,9 @@ export function addStars(world) {
     const y = (Math.random() - 0.5) * radius * 2;
     const z = (Math.random() - 0.5) * radius * 2;
 
+    // iwasan masyadong dense sa gitna
     if (Math.sqrt(x*x + y*y + z*z) > radius / 4) {
-        positions.push(x, y, z);
+      positions.push(x, y, z);
     }
   }
 
@@ -44,51 +46,51 @@ export function addStars(world) {
 
 // Simple simulated 'comet' trail
 export function setupComets() {
-    const COMET_COUNT = 3;
-    const container = document.body;
+  // Lighter animation load
+  const COMET_COUNT = 1;
+  const container = document.body;
 
-    // A Comet class (para madaling i-manage)
-    class Comet {
-        constructor(id) {
-            this.element = document.createElement('div');
-            this.element.id = `comet-${id}`;
-            this.element.className = 'comet';
-            container.appendChild(this.element);
-            this.reset();
-        }
-
-        reset() {
-            const startX = Math.random() < 0.5 ? -50 : window.innerWidth + 50;
-            const startY = Math.random() * window.innerHeight;
-            const endX = startX < 0 ? window.innerWidth + 50 : -50;
-            const endY = Math.random() * window.innerHeight;
-            const duration = Math.random() * 8 + 4; // 4 to 12 seconds
-            const delay = Math.random() * 10; // 0 to 10 seconds
-
-            this.element.style.setProperty('--start-x', `${startX}px`);
-            this.element.style.setProperty('--start-y', `${startY}px`);
-            this.element.style.setProperty('--end-x', `${endX}px`);
-            this.element.style.setProperty('--end-y', `${endY}px`);
-            this.element.style.animationDuration = `${duration}s`;
-            this.element.style.animationDelay = `${delay}s`;
-
-            this.element.style.animationName = 'none';
-            this.element.offsetHeight; // Force a reflow
-            this.element.style.animationName = 'comet-fly';
-        }
+  class Comet {
+    constructor(id) {
+      this.element = document.createElement('div');
+      this.element.id = `comet-${id}`;
+      this.element.className = 'comet';
+      container.appendChild(this.element);
+      this.reset();
     }
 
-    const comets = [];
-    for (let i = 0; i < COMET_COUNT; i++) {
-        comets.push(new Comet(i));
+    reset() {
+      const startX = Math.random() < 0.5 ? -50 : window.innerWidth + 50;
+      const startY = Math.random() * window.innerHeight;
+      const endX = startX < 0 ? window.innerWidth + 50 : -50;
+      const endY = Math.random() * window.innerHeight;
+      const duration = Math.random() * 8 + 4; // 4 to 12 seconds
+      const delay = Math.random() * 10;       // 0 to 10 seconds
+
+      this.element.style.setProperty('--start-x', `${startX}px`);
+      this.element.style.setProperty('--start-y', `${startY}px`);
+      this.element.style.setProperty('--end-x', `${endX}px`);
+      this.element.style.setProperty('--end-y', `${endY}px`);
+      this.element.style.animationDuration = `${duration}s`;
+      this.element.style.animationDelay = `${delay}s`;
+
+      this.element.style.animationName = 'none';
+      this.element.offsetHeight; // Force a reflow
+      this.element.style.animationName = 'comet-fly';
     }
+  }
 
-    container.addEventListener('animationend', (event) => {
-        if (event.target.classList.contains('comet')) {
-            const id = event.target.id.split('-')[1];
-            comets[id].reset();
-        }
-    });
+  const comets = [];
+  for (let i = 0; i < COMET_COUNT; i++) {
+    comets.push(new Comet(i));
+  }
 
-    console.log(`Setup ${COMET_COUNT} comet trails.`);
+  container.addEventListener('animationend', (event) => {
+    if (event.target.classList.contains('comet')) {
+      const id = event.target.id.split('-')[1];
+      comets[id].reset();
+    }
+  });
+
+  console.log(`Setup ${COMET_COUNT} comet trails.`);
 }
