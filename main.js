@@ -15,6 +15,11 @@ const ALWAYS_MANAGE_ON_SEARCH = true;
 const urlParams = new URLSearchParams(location.search);
 const rawEmbed = (urlParams.get("embed") || "").toLowerCase();
 
+// NEW: explicit no-UI switch via URL (?noui=1 or ?ui=0)
+const NO_UI =
+  (urlParams.get("noui") || "").toLowerCase() === "1" ||
+  (urlParams.get("ui") || "").toLowerCase() === "0";
+
 const IN_IFRAME = (() => {
   try { return window.self !== window.top; }
   catch (e) { return true; } // cross-origin iframes throw -> treat as iframe
@@ -24,7 +29,8 @@ const EMBED =
   IN_IFRAME ||
   rawEmbed === "1" ||
   rawEmbed === "true" ||
-  (rawEmbed !== "" && rawEmbed !== "0" && rawEmbed !== "false");
+  (rawEmbed !== "" && rawEmbed !== "0" && rawEmbed !== "false") ||
+  NO_UI; // <— NEW: honor noui/ui params
 
 if (EMBED) document.documentElement.classList.add("embed");
 
