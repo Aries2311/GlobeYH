@@ -132,7 +132,7 @@ if (TRANSPARENT_BG) {
   }
 } else {
   // normal (non-embed) page: dark space bg
-  world.backgroundColor("#000011");
+  world.backgroundColor("#000000ff");
 }
 
 // stars/comets only in full mode

@@ -1,0 +1,1 @@
+// Rotation allowed via pointer events; zoom disabled via &nozoom=1 in the iframe URL.
