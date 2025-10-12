@@ -6,19 +6,31 @@ import {
   setCityBrand,
   setCityBrandAndPin
 } from "./firebase.js";
-import { addStars, setupComets } from "./background-effects.js";
 
 const ALWAYS_MANAGE_ON_SEARCH = true;
 
-// ---- query params / embed flags ----
+// ================================================
+// EMBED detection + admin gating (auto-iframe aware)
+// ================================================
 const urlParams = new URLSearchParams(location.search);
 const rawEmbed = (urlParams.get("embed") || "").toLowerCase();
+
+const IN_IFRAME = (() => {
+  try { return window.self !== window.top; }
+  catch (e) { return true; } // cross-origin iframes throw -> treat as iframe
+})();
+
 const EMBED =
+  IN_IFRAME ||
   rawEmbed === "1" ||
   rawEmbed === "true" ||
-  (rawEmbed !== "0" && rawEmbed !== "false" && rawEmbed !== "");
+  (rawEmbed !== "" && rawEmbed !== "0" && rawEmbed !== "false");
+
 if (EMBED) document.documentElement.classList.add("embed");
-const TRANSPARENT_BG = EMBED || urlParams.get("bg") === "transparent";
+
+// Background + zoom query flags
+const TRANSPARENT_BG =
+  EMBED || (urlParams.get("bg") || "").toLowerCase() === "transparent";
 const NO_ZOOM = urlParams.has("nozoom") || urlParams.get("zoom") === "0";
 
 // ---------- helpers ----------
@@ -30,6 +42,7 @@ const slug = (s) =>
     .replace(/[^a-zA-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .toLowerCase();
+
 const canonicalIdOf = (o) =>
   `${slug((o.city || o.label || "").split(",")[0])}_${Number(o.lat).toFixed(
     4
@@ -100,13 +113,15 @@ const isLocal =
   ["localhost", "127.0.0.1", "::1"].includes(location.hostname) ||
   location.protocol === "file:";
 const isAdminFlag = localStorage.getItem("yh_admin") === "1";
-const canUpload = (isLocal || isAdminFlag) && !EMBED; // never show upload sa EMBED
+
+// Never allow upload/search controls to render while EMBED
+const canUpload = !EMBED && (isLocal || isAdminFlag);
 const uploadGroup =
   document.getElementById("uploadControls") || uploadBtn?.parentElement;
 if (uploadGroup && !canUpload) uploadGroup.style.display = "none";
 
 // ---------- globe ----------
-// HUWAG gagamit ng .backgroundColor() dito; gagawin nating manual ang transparency
+// HUWAG gagamit ng .backgroundColor() kapag transparent; manual ang transparency
 const world = Globe()(globeContainer)
   .globeImageUrl("//unpkg.com/three-globe/example/img/earth-day.jpg")
   .bumpImageUrl("//unpkg.com/three-globe/example/img/earth-topology.png")
@@ -133,14 +148,6 @@ if (TRANSPARENT_BG) {
 } else {
   // normal (non-embed) page: dark space bg
   world.backgroundColor("#000000ff");
-}
-
-// stars/comets only in full mode
-if (!EMBED) {
-  setTimeout(() => {
-    try { addStars(world); } catch {}
-    try { setupComets(); } catch {}
-  }, 600);
 }
 
 // controls
@@ -188,6 +195,7 @@ const ensureHydratedAllCities = () => {
     allCities = cities; // no render here; pinned stream handles markers
   }); // default: full collection
 };
+
 if (!EMBED) {
   searchInput?.addEventListener("focus", ensureHydratedAllCities);
   searchInput?.addEventListener("input", () => {
@@ -259,7 +267,8 @@ function renderGlobeMarkers(data) {
       img.src = iconFor(d);
       img.onclick = (e) => {
         e.stopPropagation();
-        if (!isLocal && !isAdminFlag) return;
+        // Block any management when EMBED or when viewer is neither local nor admin
+        if (EMBED || (!isLocal && !isAdminFlag)) return;
         const id = canonicalIdOf(d);
         const isPinned = !!d.is_pinned;
         pinningModalLabel && (pinningModalLabel.textContent = "Pin / Unpin Location");
@@ -371,7 +380,7 @@ window.onload = () => {
   );
 };
 
-// hide search UI for viewers or EMBED
+// ---------- final UI hiding for EMBED (JS fallback to CSS) ----------
 const searchContainer = document.querySelector(".search-bar-container");
 if (searchContainer && (EMBED || !canUpload)) {
   searchContainer.style.display = "none";
@@ -379,8 +388,7 @@ if (searchContainer && (EMBED || !canUpload)) {
   if (sr) sr.style.display = "none";
 }
 
-// extra: hide the whole UI container if EMBED (CSS already does this; JS is fallback)
-// Hide search and upload controls if in embed mode
+// Hide entire UI when EMBED
 if (EMBED) {
   const uiContainer = document.querySelector(".ui-container");
   const searchResults = document.getElementById("search-results");
@@ -389,4 +397,8 @@ if (EMBED) {
   if (uiContainer) uiContainer.style.display = "none"; // Hide the entire UI
   if (searchResults) searchResults.style.display = "none"; // Hide search results
   if (uploadControls) uploadControls.style.display = "none"; // Hide upload button
+
+  // Extra safety: hide modal backdrops if any were pre-rendered
+  const backdrops = document.querySelectorAll(".modal, .modal-backdrop");
+  backdrops.forEach((el) => (el.style.display = "none"));
 }

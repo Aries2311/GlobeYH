@@ -1,0 +1,32 @@
+/* styles.css */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; overflow:hidden;
+  font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background:#000;            /* default (non-embed) */
+}
+#globeViz{width:100vw;height:100vh;position:relative}
+
+/* UI (visible only when NOT embed) */
+.ui-container{position:absolute;top:10px;right:10px;display:flex;align-items:center;gap:10px;z-index:1000}
+.search-bar-container{position:relative;display:flex;flex-direction:column;width:250px}
+#search-input{padding:8px 12px;border-radius:8px;border:1px solid #ccc;box-shadow:0 4px 6px rgba(0,0,0,.1)}
+#search-results{list-style:none;padding:0;margin:0;position:absolute;top:100%;width:100%;background:#fff;border:1px solid #ccc;border-top:none;border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;display:none;z-index:1001;box-shadow:0 8px 16px rgba(0,0,0,.2)}
+#search-results li{padding:8px 12px;cursor:pointer;border-bottom:1px solid #eee;font-size:14px}
+#search-results li:hover{background:#f0f0f0}
+#loading-spinner{display:none}
+
+/* Globe markers */
+.marker-container{display:flex;flex-direction:column;align-items:center;cursor:pointer}
+.marker-icon{width:40px;height:40px;border-radius:50%;border:3px solid #fff;transition:transform .2s,box-shadow .2s}
+.marker-icon:hover{transform:scale(1.1);box-shadow:0 0 10px rgba(255,255,255,.7)}
+.marker-label{margin-top:2px;color:#2fe0ff;font-size:14px;font-weight:700;text-align:center;text-shadow:0 0 5px #000,0 0 10px #000;pointer-events:none}
+
+/* EMBED: transparent + hide all UI */
+html.embed body,
+html.embed #globeViz{background:transparent!important}
+html.embed .ui-container,
+html.embed .modal,
+html.embed #uploadControls,
+html.embed #search-results{display:none!important}
