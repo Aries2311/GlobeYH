@@ -380,7 +380,13 @@ if (searchContainer && (EMBED || !canUpload)) {
 }
 
 // extra: hide the whole UI container if EMBED (CSS already does this; JS is fallback)
+// Hide search and upload controls if in embed mode
 if (EMBED) {
-  const ui = document.querySelector(".ui-container");
-  if (ui) ui.style.display = "none";
+  const uiContainer = document.querySelector(".ui-container");
+  const searchResults = document.getElementById("search-results");
+  const uploadControls = document.getElementById("uploadControls");
+
+  if (uiContainer) uiContainer.style.display = "none"; // Hide the entire UI
+  if (searchResults) searchResults.style.display = "none"; // Hide search results
+  if (uploadControls) uploadControls.style.display = "none"; // Hide upload button
 }
