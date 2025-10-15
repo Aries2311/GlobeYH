@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Interactive Globe</title>
 
+  <!-- Anti-flicker: set embed class BEFORE any CSS loads -->
+  <script>
+  (function () {
+    var q = location.search || "";
+    var isEmbed =
+      q.includes("embed=1") ||
+      (function(){ try { return self !== top; } catch(e){ return true; } })() ||
+      /(?:^|[?&])(ui=0|noui=1)(?:&|$)/.test(q);
+    if (isEmbed) document.documentElement.classList.add("embed");
+  })();
+  </script>
+
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.5/dist/sweetalert2.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -45,10 +57,16 @@
     /* ===== EMBED MODE: globe-only, transparent background ===== */
     html.embed body { background: transparent !important; }
     html.embed #globeViz { background: transparent !important; }
+
+    /* Updated: avoid "flash" by hiding via visibility/opacity and disabling pointer events */
     html.embed .ui-container,
     html.embed .modal,
     html.embed #uploadControls,
-    html.embed #search-results { display: none !important; }
+    html.embed #search-results {
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
     html.embed .comet { display: none !important; }
   </style>
 </head>

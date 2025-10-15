@@ -388,7 +388,8 @@ window.onload = () => {
 
 // ---------- final UI hiding for EMBED (JS fallback to CSS) ----------
 const searchContainer = document.querySelector(".search-bar-container");
-if (searchContainer && (EMBED || !canUpload)) {
+// NEW: itago lang ang search kapag EMBED talaga
+if (searchContainer && EMBED) {
   searchContainer.style.display = "none";
   const sr = document.getElementById("search-results");
   if (sr) sr.style.display = "none";
