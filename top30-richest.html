@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Top 30 Richest Cities — Globe</title>
+  <meta name="color-scheme" content="dark" />
+  <style>
+    :root { color-scheme: dark; }
+    html, body { height: 100%; }
+    body { margin: 0; background:#000; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; }
+    #globeTop30 { width: 100vw; height: 100vh; position: relative; }
+    .title {
+      position: absolute; top: 12px; left: 12px; z-index: 10;
+      padding: 6px 10px; border-radius: 10px; background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      font-weight: 700; font-size: 14px; letter-spacing: .2px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .marker-container { display:flex; flex-direction:column; align-items:center; pointer-events:auto; cursor:pointer; }
+    .marker-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      border: 2px solid #fff; background: #00e5ff;
+      box-shadow: 0 0 14px rgba(0,229,255,.85);
+    }
+    .marker-label {
+      margin-top: 4px; color: #2fe0ff; font-size: 13px; font-weight: 700;
+      text-shadow: 0 0 5px #000, 0 0 15px #000;
+      pointer-events: none; white-space: nowrap;
+    }
+    .credits {
+      position: absolute; bottom: 10px; right: 12px; font-size: 12px;
+      color: #9ec; opacity: .7; z-index: 10;
+    }
+    .load-fallback {
+      position: absolute; inset: 0; display: none; place-items: center;
+      background: rgba(0,0,0,.6); z-index: 20;
+    }
+    .panel {
+      background: rgba(10,14,17,.8); border: 1px solid rgba(255,255,255,.08);
+      padding: 16px; border-radius: 16px; width: min(92vw, 520px); color: #dff;
+    }
+    .panel h2 { margin: 0 0 8px; font-size: 18px; }
+    .panel p { margin: 0 0 10px; font-size: 14px; opacity: .9; }
+    .panel input[type="file"] { margin-top: 8px; }
+    .btn {
+      display:inline-block; padding:8px 12px; border-radius: 10px; border:1px solid rgba(255,255,255,.15);
+      background: #0b1217; color:#cfe; font-weight: 700; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="globeTop30"></div>
+  <div class="title">Top 30 Richest Cities in the World</div>
+  <div class="credits">Data: <code>top30_richest_cities.csv</code></div>
+
+  <!-- Fallback panel for local file usage -->
+  <div class="load-fallback" id="fallback">
+    <div class="panel">
+      <h2>Load CSV Manually</h2>
+      <p>Unable to fetch <code>top30_richest_cities.csv</code>. If you're opening this file directly (file://), use the uploader.</p>
+      <input id="filePick" type="file" accept=".csv" />
+      <button id="fileUse" class="btn">Use this CSV</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/globe.gl"></script>
+  <script>
+    const container = document.getElementById('globeTop30');
+    const world = Globe()(container)
+      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-day.jpg')
+      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+      .showGraticules(true)
+      .showAtmosphere(true)
+      .backgroundColor('#000000');
+
+    // Helpers
+    const parseCSV = (text) => {
+      const lines = text.split(/\\r?\\n/).filter(l => l.trim().length);
+      if (lines.length < 2) return [];
+      const split = (line) => (line.match(/(?:"[^"]*"|[^,]+)/g) || []).map(v => v.trim().replace(/^"|"$/g,''));
+      const headers = split(lines[0]).map(h => h.toLowerCase());
+      const idx = {
+        city: headers.indexOf('city'),
+        lat: headers.indexOf('lat'),
+        lng: headers.indexOf('lng'),
+        country: headers.indexOf('country')
+      };
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        const v = split(lines[i]);
+        const city = v[idx.city];
+        const lat = parseFloat(v[idx.lat]);
+        const lng = parseFloat(v[idx.lng]);
+        if (!city || Number.isNaN(lat) || Number.isNaN(lng)) continue;
+        rows.push({ city, lat, lng, country: idx.country !== -1 ? (v[idx.country] || '') : '' });
+      }
+      return rows;
+    };
+
+    function renderMarkers(items) {
+      world
+        .htmlElementsData(items)
+        .htmlElement(d => {
+          const wrap = document.createElement('div');
+          wrap.className = 'marker-container';
+          wrap.title = d.city;
+          const dot = document.createElement('div');
+          dot.className = 'marker-dot';
+          const label = document.createElement('div');
+          label.className = 'marker-label';
+          label.textContent = d.city; // city ONLY
+          wrap.appendChild(dot);
+          wrap.appendChild(label);
+          wrap.addEventListener('click', () => {
+            const pov = world.pointOfView ? world.pointOfView() : { altitude: 0.8 };
+            world.pointOfView({ lat: d.lat, lng: d.lng, altitude: .5 }, 1000);
+          });
+          return wrap;
+        })
+        .htmlLat(d => d.lat)
+        .htmlLng(d => d.lng)
+        .htmlAltitude(0.004);
+    }
+
+    async function tryFetchDefault() {
+      try {
+        const res = await fetch('top30_richest_cities.csv', { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        const rows = parseCSV(text);
+        if (!rows.length) throw new Error('CSV is empty / bad headers.');
+        renderMarkers(rows);
+        // Auto-focus roughly between Europe/Asia to center clusters initially
+        world.pointOfView({ lat: 25, lng: 20, altitude: 1.8 }, 0);
+      } catch (e) {
+        // Show fallback
+        document.getElementById('fallback').style.display = 'grid';
+      }
+    }
+
+    tryFetchDefault();
+
+    // Fallback via manual file load
+    document.getElementById('fileUse').addEventListener('click', async () => {
+      const f = document.getElementById('filePick').files[0];
+      if (!f) return alert('Choose a CSV first.');
+      const text = await f.text();
+      const rows = parseCSV(text);
+      if (!rows.length) return alert('Invalid/empty CSV.');
+      document.getElementById('fallback').style.display = 'none';
+      renderMarkers(rows);
+      world.pointOfView({ lat: 25, lng: 20, altitude: 1.8 }, 0);
+    });
+  </script>
+</body>
+</html>
