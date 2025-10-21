@@ -66,7 +66,6 @@ let richestLoaded = false;
 // ---------- icons & display ----------
 const FED_ICON = "./assets/federation-logo.png";
 const ACAD_ICON = "./assets/academy-logo.png";
-// Plaza icon
 const PLAZA_ICON = "./assets/plaza-logo.png";
 
 const ICONS = { federation: FED_ICON, academy: ACAD_ICON, plaza: PLAZA_ICON };
@@ -81,6 +80,13 @@ const displayNameFor = (o) => {
 };
 
 const iconFor = (o) => ICONS[String(o.brand || "").toLowerCase()] || FED_ICON;
+
+// ===== NEW: bigger brand icons on live GitHub Pages =====
+const IS_GHPAGES = /github\.io$/i.test(location.hostname);
+const ICON_PX_OVERRIDE = parseInt(urlParams.get("iconsize") || "", 10);
+const BRAND_ICON_SIZE = Number.isFinite(ICON_PX_OVERRIDE)
+  ? ICON_PX_OVERRIDE
+  : (IS_GHPAGES ? 52 : 40); // live: 52px, local/default: 40px
 
 // ---------- elements ----------
 const globeContainer = document.getElementById("globeViz");
@@ -222,7 +228,7 @@ async function loadRichest() {
 
   // 2) Try CSV files (preferred: top150)
   if (!richestLoaded) {
-    // 👇 ONLY CHANGE: include your top150_major_cities.csv first
+    // include top150_major_cities.csv first
     const tryFiles = ["top150_major_cities.csv", "top150_richest_cities.csv", "richest_cities.csv", "top30_richest_cities.csv"];
     for (const f of tryFiles) {
       try {
@@ -373,6 +379,11 @@ function renderGlobeMarkers(data) {
       const img = document.createElement("img");
       img.className = "marker-icon";
       img.src = iconFor(d);
+
+      // NEW: enlarge brand icons on live site (or via ?iconsize=XX)
+      img.style.width = `${BRAND_ICON_SIZE}px`;
+      img.style.height = `${BRAND_ICON_SIZE}px`;
+
       img.onclick = (e) => {
         e.stopPropagation();
         if (EMBED || (!isLocal && !isAdminFlag)) return;
