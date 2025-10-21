@@ -47,8 +47,11 @@
     .marker-icon:hover { transform:scale(1.1); box-shadow:0 0 10px rgba(255,255,255,.7); }
     .marker-label { margin-top:2px; color:#2fe0ff; font-size:14px; font-weight:bold; text-align:center; text-shadow:0 0 5px #000, 0 0 10px #000; pointer-events:none; }
 
-    /* NEW: special color for Top-30 labels (no dot) */
-    .marker-label.top30 { color:#ffd166; } /* gold */
+    /* Legacy Top-30 style (kept for fallback) */
+    .marker-label.top30 { color:#ffd166; }
+
+    /* NEW: Richest (Top 150) labels — gold + slightly smaller */
+    .marker-label.richest { color:#ffd166; font-size:12px; }
 
     #loading-spinner { display:none; }
 
@@ -89,9 +92,9 @@
       </button>
     </div>
 
-    <!-- Toggle the Top-30 layer (default ON) -->
-    <button type="button" class="btn btn-outline-info" id="btnTop30" title="Toggle Top 30 Richest Cities">
-      <i class="fa-solid fa-trophy"></i> Top 30
+    <!-- Toggle the Richest Cities layer (default ON) -->
+    <button type="button" class="btn btn-outline-info" id="btnRichest" title="Toggle Top 150 Richest Cities">
+      <i class="fa-solid fa-trophy"></i> Top 150
     </button>
   </div>
 
@@ -152,6 +155,8 @@
           <button type="button" class="btn btn-danger" id="chooseUnpinBtn" style="display:none">Unpin</button>
           <button type="button" class="btn btn-dark" id="chooseFederationBtn">Federation</button>
           <button type="button" class="btn btn-primary" id="chooseAcademyBtn">Academy</button>
+          <!-- NEW: Plaza brand -->
+          <button type="button" class="btn btn-success" id="choosePlazaBtn">Plaza</button>
         </div>
       </div>
     </div>
@@ -192,7 +197,10 @@
   <!-- App logic -->
   <script type="module" src="./main.js"></script>
 
-  <!-- Inline JSON of Top 30 Richest Cities (labels only; no dots) -->
+  <!-- NEW: Inline JSON container for Top 150 (leave [] empty if you'll use CSV) -->
+  <script id="richestCitiesJSON" type="application/json">[]</script>
+
+  <!-- Legacy inline JSON of Top 30 (kept for fallback) -->
   <script id="top30RichestJSON" type="application/json">[{"city":"Tokyo","lat":35.687,"lng":139.7495,"country":"Japan"},{"city":"New York","lat":40.6943,"lng":-73.9249,"country":"United States"},{"city":"Los Angeles","lat":34.1141,"lng":-118.4068,"country":"United States"},{"city":"Seoul","lat":37.5667,"lng":126.9833,"country":"Korea, South"},{"city":"London","lat":51.5072,"lng":-0.1275,"country":"United Kingdom"},{"city":"Chicago","lat":41.8373,"lng":-87.6862,"country":"United States"},{"city":"Paris","lat":48.8566,"lng":2.3522,"country":"France"},{"city":"Shenzhen","lat":22.535,"lng":114.054,"country":"China"},{"city":"Osaka","lat":34.6939,"lng":135.5022,"country":"Japan"},{"city":"Shanghai","lat":31.1667,"lng":121.4667,"country":"China"},{"city":"Moscow","lat":55.7558,"lng":37.6178,"country":"Russia"},{"city":"Beijing","lat":39.905,"lng":116.3914,"country":"China"},{"city":"San Francisco","lat":37.7562,"lng":-122.443,"country":"United States"},{"city":"Guangzhou","lat":23.1288,"lng":113.259,"country":"China"},{"city":"Hong Kong","lat":22.35,"lng":114.2,"country":"Hong Kong"},{"city":"Dallas","lat":32.7936,"lng":-96.7662,"country":"United States"},{"city":"Philadelphia","lat":40.0076,"lng":-75.134,"country":"United States"},{"city":"Miami","lat":25.7839,"lng":-80.2102,"country":"United States"},{"city":"Boston","lat":42.3188,"lng":-71.0846,"country":"United States"},{"city":"Washington","lat":38.9047,"lng":-77.0163,"country":"United States"},{"city":"Singapore","lat":1.2897,"lng":103.8501,"country":"Singapore"},{"city":"Sydney","lat":-33.8696,"lng":151.2069,"country":"Australia"},{"city":"Toronto","lat":43.7417,"lng":-79.3733,"country":"Canada"},{"city":"Zurich","lat":47.377,"lng":8.54,"country":"Switzerland"},{"city":"San Jose","lat":37.302,"lng":-121.8488,"country":"United States"},{"city":"Houston","lat":29.784,"lng":-95.3455,"country":"United States"},{"city":"Munich","lat":48.1374,"lng":11.5755,"country":"Germany"},{"city":"Frankfurt","lat":50.1106,"lng":8.6822,"country":"Germany"},{"city":"Stockholm","lat":59.3294,"lng":18.0686,"country":"Sweden"},{"city":"Amsterdam","lat":52.374,"lng":4.8897,"country":"Netherlands"}]</script>
 </body>
 </html>

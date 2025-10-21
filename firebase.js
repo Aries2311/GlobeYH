@@ -104,16 +104,18 @@ const setPinStatus = async (docId, pinned) => {
 };
 
 // ---------- brand helpers ----------
+const ALLOWED_BRANDS = ["academy","federation","plaza"];
+
 const setCityBrand = async (docId, brand) => {
   const b = String(brand || "").toLowerCase();
-  if (!["academy","federation"].includes(b)) throw new Error("Invalid brand (use 'academy' | 'federation').");
+  if (!ALLOWED_BRANDS.includes(b)) throw new Error("Invalid brand (use 'academy' | 'federation' | 'plaza').");
   await setDoc(doc(db, "all_cities", docId), { brand: b, updated_at: new Date().toISOString() }, { merge: true });
 };
 
 // set brand AND pin in one write (used when branding an unpinned city)
 const setCityBrandAndPin = async (docId, brand, pinned = true) => {
   const b = String(brand || "").toLowerCase();
-  if (!["academy","federation"].includes(b)) throw new Error("Invalid brand (use 'academy' | 'federation').");
+  if (!ALLOWED_BRANDS.includes(b)) throw new Error("Invalid brand (use 'academy' | 'federation' | 'plaza').");
   await setDoc(doc(db, "all_cities", docId), {
     brand: b,
     is_pinned: !!pinned,

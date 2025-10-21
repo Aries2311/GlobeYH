@@ -58,22 +58,28 @@ let searchTimeout;
 let unsubAll = null;    // listener for ALL cities (lazy)
 let hydratedAll = false;
 
-// ===== Top 30 layer state =====
-let showTop30 = true;   // toggle ON/OFF (default ON)
-let top30Cities = [];   // parsed from inline JSON or CSV
-let top30Loaded = false;
+// ===== Richest layer state (Top 150) =====
+let showRichest = true;   // toggle ON/OFF (default ON)
+let richestCities = [];   // parsed from inline JSON/CSV
+let richestLoaded = false;
 
 // ---------- icons & display ----------
-const FED_ICON = "./assets/my-logo.png";
+const FED_ICON = "./assets/federation-logo.png";
 const ACAD_ICON = "./assets/academy-logo.png";
-const ICONS = { federation: FED_ICON, academy: ACAD_ICON };
+// Plaza icon
+const PLAZA_ICON = "./assets/plaza-logo.png";
+
+const ICONS = { federation: FED_ICON, academy: ACAD_ICON, plaza: PLAZA_ICON };
+
 const displayNameFor = (o) => {
   const base = (o.label || "").split(",")[0].trim();
   const b = String(o.brand || "").toLowerCase();
   if (b === "academy") return `${base} - Academy`;
   if (b === "federation") return `${base} - Federation`;
+  if (b === "plaza") return `${base} - Plaza`;
   return base;
 };
+
 const iconFor = (o) => ICONS[String(o.brand || "").toLowerCase()] || FED_ICON;
 
 // ---------- elements ----------
@@ -99,8 +105,9 @@ const brandModalText = document.getElementById("brandModalText");
 let chooseFederationBtn = document.getElementById("chooseFederationBtn");
 let chooseAcademyBtn = document.getElementById("chooseAcademyBtn");
 let chooseUnpinBtn = document.getElementById("chooseUnpinBtn");
+let choosePlazaBtn = document.getElementById("choosePlazaBtn");
 
-// auto-create Unpin button if missing
+// auto-create Unpin button if missing (safety)
 if (brandModalEl && !chooseUnpinBtn) {
   const footer = brandModalEl.querySelector(".modal-footer");
   if (footer) {
@@ -165,25 +172,25 @@ if (NO_ZOOM) {
   }, { passive: false });
 }
 
-// ===== TOP 30 HELPERS =====
+// ===== Legacy Top 30 helpers (kept as fallback) =====
 function parseTop30FromJSON() {
   try {
     const el = document.getElementById("top30RichestJSON");
     if (!el) return false;
     const arr = JSON.parse(el.textContent || "[]");
-    top30Cities = (arr || [])
-      .map((o) => ({ ...o, top30: true }))
+    richestCities = (arr || [])
+      .map((o) => ({ ...o, richest: true }))  // map to richest flag
       .filter((o) => o && o.city && !Number.isNaN(Number(o.lat)) && !Number.isNaN(Number(o.lng)));
-    top30Loaded = top30Cities.length > 0;
-    return top30Loaded;
+    richestLoaded = richestCities.length > 0;
+    return richestLoaded;
   } catch (e) {
-    console.warn("[top30] JSON parse failed", e);
+    console.warn("[richest/top30] JSON parse failed", e);
     return false;
   }
 }
 
-// tiny CSV parser (fallback)
-function parseTop30Csv(text) {
+// tiny CSV parser (generic)
+function parseCsv(text) {
   const lines = (text || "").split(/\r?\n/).filter((l) => l.trim().length);
   if (lines.length < 2) return [];
   const split = (line) => (line.match(/(?:"[^"]*"|[^,]+)/g) || []).map((v) => v.trim().replace(/^"|"$/g, ""));
@@ -199,18 +206,45 @@ function parseTop30Csv(text) {
   return rows;
 }
 
-async function loadTop30() {
-  if (parseTop30FromJSON()) { refreshCombinedRender(); return; }
+// NEW: Richest loader (Top 150 first; with fallbacks)
+async function loadRichest() {
+  // 1) Try inline JSON for Top 150
   try {
-    const res = await fetch("top30_richest_cities.csv", { cache: "no-store" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const text = await res.text();
-    top30Cities = parseTop30Csv(text).map((o) => ({ ...o, top30: true }));
-    top30Loaded = top30Cities.length > 0;
-    refreshCombinedRender();
-  } catch (e) {
-    console.log("[top30] no CSV available (optional).");
+    const el = document.getElementById("richestCitiesJSON");
+    if (el) {
+      const arr = JSON.parse(el.textContent || "[]");
+      if (Array.isArray(arr) && arr.length > 0) {
+        richestCities = arr.map((o) => ({ ...o, richest: true }));
+        richestLoaded = richestCities.length > 0;
+      }
+    }
+  } catch (e) { console.warn("[richest] inline JSON parse failed", e); }
+
+  // 2) Try CSV files (preferred: top150)
+  if (!richestLoaded) {
+    // 👇 ONLY CHANGE: include your top150_major_cities.csv first
+    const tryFiles = ["top150_major_cities.csv", "top150_richest_cities.csv", "richest_cities.csv", "top30_richest_cities.csv"];
+    for (const f of tryFiles) {
+      try {
+        const res = await fetch(f, { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const text = await res.text();
+        const parsed = parseCsv(text);
+        if (parsed.length) {
+          richestCities = parsed.map((o) => ({ ...o, richest: true }));
+          richestLoaded = true;
+          break;
+        }
+      } catch (e) { /* keep trying next file */ }
+    }
   }
+
+  // 3) Legacy inline Top 30 fallback
+  if (!richestLoaded) {
+    parseTop30FromJSON();
+  }
+
+  refreshCombinedRender();
 }
 
 function mergeByCanonical(a, b) {
@@ -224,8 +258,8 @@ function mergeByCanonical(a, b) {
 }
 
 function combinedData() {
-  return showTop30 && top30Cities?.length
-    ? mergeByCanonical(pinnedCities || [], top30Cities || [])
+  return showRichest && richestCities?.length
+    ? mergeByCanonical(pinnedCities || [], richestCities || [])
     : pinnedCities || [];
 }
 
@@ -305,13 +339,13 @@ function displaySearchResults(results) {
   });
 }
 
-// ---------- render (combined: pinned + top30) ----------
+// ---------- render (combined: pinned + richest) ----------
 function renderGlobeMarkers(data) {
   world
     .htmlElementsData(data)
     .htmlElement((d) => {
-      // TOP 30 markers: LABEL ONLY (gold), NO DOT
-      if (d.top30 && !d.is_pinned) {
+      // Richest markers: LABEL ONLY (gold), NO DOT
+      if (d.richest && !d.is_pinned) {
         const wrap = document.createElement("div");
         wrap.className = "marker-container";
         wrap.style.pointerEvents = "auto";
@@ -319,7 +353,7 @@ function renderGlobeMarkers(data) {
 
         const label = document.createElement("div");
         label.textContent = d.city;
-        label.className = "marker-label top30"; // <-- gold color via CSS
+        label.className = "marker-label richest"; // gold color via CSS
         wrap.appendChild(label);
 
         wrap.addEventListener("click", () => {
@@ -364,7 +398,7 @@ function renderGlobeMarkers(data) {
     })
     .htmlLat((d) => d.lat)
     .htmlLng((d) => d.lng)
-    .htmlAltitude((d) => (d.top30 && !d.is_pinned ? 0.004 : 0.005));
+    .htmlAltitude((d) => (d.richest && !d.is_pinned ? 0.004 : 0.005));
 }
 
 // ---------- brand/unpin actions ----------
@@ -399,6 +433,7 @@ async function unpinChosenCity() {
 }
 document.getElementById("chooseAcademyBtn")?.addEventListener("click", () => applyBrandChoice("academy"));
 document.getElementById("chooseFederationBtn")?.addEventListener("click", () => applyBrandChoice("federation"));
+document.getElementById("choosePlazaBtn")?.addEventListener("click", () => applyBrandChoice("plaza"));
 document.getElementById("chooseUnpinBtn")?.addEventListener("click", unpinChosenCity);
 
 // ---------- upload ----------
@@ -424,27 +459,27 @@ window.onload = () => {
   listenToCities(
     (cities) => {
       pinnedCities = cities;
-      refreshCombinedRender(); // render pinned + top30 (if loaded)
+      refreshCombinedRender(); // render pinned + richest (if loaded)
       console.log(`[SNAPSHOT] pinned=${pinnedCities.length}`);
     },
     { onlyPinned: true }
   );
 
-  // Load Top-30 list
-  loadTop30();
+  // Load Richest (Top 150 preferred)
+  loadRichest();
 
-  // Setup Top-30 toggle
-  const btnTop = document.getElementById("btnTop30");
+  // Setup Richest toggle
+  const btnTop = document.getElementById("btnRichest");
   if (btnTop) {
     const reflect = () => {
-      btnTop.classList.toggle("btn-outline-info", showTop30);
-      btnTop.classList.toggle("btn-secondary", !showTop30);
-      btnTop.innerHTML = showTop30 ? '<i class="fa-solid fa-trophy"></i> Top 30'
-                                   : '<i class="fa-solid fa-trophy"></i> Top 30 (off)';
+      btnTop.classList.toggle("btn-outline-info", showRichest);
+      btnTop.classList.toggle("btn-secondary", !showRichest);
+      btnTop.innerHTML = showRichest ? '<i class="fa-solid fa-trophy"></i> Top 150'
+                                     : '<i class="fa-solid fa-trophy"></i> Top 150 (off)';
     };
     reflect();
     btnTop.addEventListener("click", () => {
-      showTop30 = !showTop30;
+      showRichest = !showRichest;
       reflect();
       refreshCombinedRender();
     });
