@@ -106,11 +106,25 @@ if (uploadGroup && !canUpload) uploadGroup.style.display = "none";
 
 // =========================== Globe =============================
 const world = Globe()(globeContainer)
-  .globeImageUrl("//unpkg.com/three-globe/example/img/earth-day.jpg")
-  .bumpImageUrl("//unpkg.com/three-globe/example/img/earth-topology.png")
-  world.backgroundColor('rgba(0,0,0,0)');  // fully transparent background
+  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-day.jpg')
+  .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
   .showGraticules(true)
   .showAtmosphere(true);
+
+// If transparent mode (embed or ?bg=transparent), clear ALL backgrounds
+if (TRANSPARENT_BG) {
+  world.backgroundColor('rgba(0,0,0,0)');
+  try {
+    world.scene().background = null;
+    const r = world.renderer();
+    r.setClearColor(0x000000, 0);
+    r.setClearAlpha(0);
+    globeContainer.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+  } catch {}
+} else {
+  world.backgroundColor('#000000'); // normal (hindi embed)
+}
 
 // ---- LABELS LAYER for the overlay (embedded on surface) ----
 world
