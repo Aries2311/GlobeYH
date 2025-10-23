@@ -21,7 +21,10 @@ const EMBED = IN_IFRAME || rawEmbed === "1" || rawEmbed === "true" ||
 if (EMBED) document.documentElement.classList.add("embed");
 
 const TRANSPARENT_BG = EMBED || (urlParams.get("bg") || "").toLowerCase() === "transparent";
-const NO_ZOOM = urlParams.has("nozoom") || urlParams.get("zoom") === "0";
+
+// ✅ fix: only disable zoom if nozoom=1/true or zoom=0
+const nz = (urlParams.get("nozoom") || "").toLowerCase();
+const NO_ZOOM = nz === "1" || nz === "true" || urlParams.get("zoom") === "0";
 
 // ============================ helpers ===========================
 const slug = (s) => (s || "").toString().normalize("NFKD")
@@ -58,10 +61,59 @@ const displayNameFor = (o) => {
 };
 const iconFor = (o) => ICONS[String(o.brand || "").toLowerCase()] || FED_ICON;
 
-// Bigger brand icons on live GitHub Pages
-const IS_GHPAGES = /github\.io$/i.test(location.hostname);
-const ICON_PX_OVERRIDE = parseInt(urlParams.get("iconsize") || "", 10);
-const BRAND_ICON_SIZE = Number.isFinite(ICON_PX_OVERRIDE) ? ICON_PX_OVERRIDE : (IS_GHPAGES ? 52 : 40);
+// =================== Responsive PIN SIZE control =================
+// (auto-detect mobile/desktop + embed, allow ?iconsize=NN override)
+function isMobile() {
+  return (
+    matchMedia('(max-width:768px)').matches ||
+    matchMedia('(pointer:coarse)').matches ||
+    /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  );
+}
+function isEmbed() {
+  const q = new URLSearchParams(location.search);
+  const qEmbed = (q.get('embed') || '').toLowerCase();
+  const noUI = (q.get('ui') || '') === '0' || (q.get('noui') || '') === '1';
+  let inIframe = false; try { inIframe = self !== top; } catch { inIframe = true; }
+  return inIframe || noUI || (qEmbed && qEmbed !== '0' && qEmbed !== 'false');
+}
+function computePinSize() {
+  const override = parseInt((urlParams.get("iconsize") || ""), 10);
+  if (Number.isFinite(override)) return Math.max(12, Math.min(128, override));
+
+  const m = isMobile();
+  const e = isEmbed();
+
+  // tuned defaults
+  if (m && e) return 36;      // mobile embed
+  if (m && !e) return 40;     // mobile full app
+  if (!m && e) return 52;     // desktop embed
+  return 46;                  // desktop full app
+}
+function observePinSize(cb) {
+  if (typeof cb !== 'function') return;
+  let last = -1;
+  const run = () => {
+    const sz = computePinSize();
+    if (sz !== last) { last = sz; cb(sz); }
+  };
+  run();
+  const ro = new ResizeObserver(run);
+  ro.observe(document.documentElement);
+  addEventListener('resize', run);
+  addEventListener('orientationchange', run);
+}
+
+// mutable size used by renderers
+let BRAND_ICON_SIZE = computePinSize();
+observePinSize((sz) => {
+  BRAND_ICON_SIZE = sz;
+  // update any already-rendered DOM markers
+  document.querySelectorAll('.marker-icon, .yh-pin-img').forEach(img => {
+    img.style.width = sz + 'px';
+    img.style.height = sz + 'px';
+  });
+});
 
 // ============================== DOM =============================
 const globeContainer = document.getElementById("globeViz");
@@ -139,19 +191,6 @@ world
   .labelResolution(4)
   .labelsTransitionDuration(300);
 
-if (TRANSPARENT_BG) {
-  try {
-    world.scene().background = null;
-    const r = world.renderer();
-    r.setClearColor(0x000000, 0);
-    r.setClearAlpha(0);
-    globeContainer.style.background = "transparent";
-    document.body.style.background = "transparent";
-  } catch {}
-} else {
-  world.backgroundColor("#000000ff");
-}
-
 (world.controls().autoRotate = false), (world.controls().autoRotateSpeed = 0.0);
 const ctrl = world.controls();
 if (NO_ZOOM) {
@@ -162,6 +201,10 @@ if (NO_ZOOM) {
   ctrl.maxDistance = dist;
   const dom = world.renderer().domElement;
   dom.addEventListener("touchmove", (e) => { if (e.touches?.length >= 2) { e.preventDefault(); e.stopPropagation(); } }, { passive: false });
+} else {
+  ctrl.enableZoom = true;
+  ctrl.enableRotate = true;
+  ctrl.enablePan = false;
 }
 
 // ==================== Legacy Top30 fallback =====================
@@ -311,11 +354,11 @@ function renderGlobeMarkers(pinnedOnly) {
       const wrap = document.createElement("div");
       wrap.className = "marker-container";
 
-      const brand = String(d.brand || "").toLowerCase();  // <- brand string
+      const brand = String(d.brand || "").toLowerCase();
 
       // ICON
       const img = document.createElement("img");
-      img.className = `marker-icon ${brand ? `brand-${brand}` : ""}`.trim(); // <- brand class on icon
+      img.className = `marker-icon ${brand ? `brand-${brand}` : ""}`.trim();
       img.src = iconFor(d);
       img.style.width = `${BRAND_ICON_SIZE}px`;
       img.style.height = `${BRAND_ICON_SIZE}px`;
@@ -335,7 +378,7 @@ function renderGlobeMarkers(pinnedOnly) {
         pinningModal?.show();
       };
 
-      // LABEL (brand color na rin; mayroon ka na nito dati)
+      // LABEL
       const label = document.createElement("span");
       label.className = `marker-label ${brand ? `brand-${brand}` : ""}`.trim();
       label.textContent = displayNameFor(d);
@@ -348,7 +391,6 @@ function renderGlobeMarkers(pinnedOnly) {
     .htmlLng((d) => d.lng)
     .htmlAltitude(() => 0.005);
 }
-
 
 function refreshCombinedRender() {
   renderGlobeMarkers(pinnedCities || []);
