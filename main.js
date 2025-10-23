@@ -85,8 +85,8 @@ function computePinSize() {
   const e = isEmbed();
 
   // tuned defaults
-  if (m && e) return 36;      // mobile embed
-  if (m && !e) return 40;     // mobile full app
+  if (m && e) return 30;      // mobile embed
+  if (m && !e) return 34;     // mobile full app
   if (!m && e) return 52;     // desktop embed
   return 46;                  // desktop full app
 }
