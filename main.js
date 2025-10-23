@@ -108,6 +108,7 @@ if (uploadGroup && !canUpload) uploadGroup.style.display = "none";
 const world = Globe()(globeContainer)
   .globeImageUrl("//unpkg.com/three-globe/example/img/earth-day.jpg")
   .bumpImageUrl("//unpkg.com/three-globe/example/img/earth-topology.png")
+  world.backgroundColor('rgba(0,0,0,0)');  // fully transparent background
   .showGraticules(true)
   .showAtmosphere(true);
 
