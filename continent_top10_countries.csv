@@ -1,0 +1,59 @@
+continent,country,city,lat,lng
+Asia,China,Beijing,39.9067,116.3975
+Asia,India,New Delhi,28.6139,77.2089
+Asia,Indonesia,Jakarta,-6.175,106.8275
+Asia,Pakistan,Islamabad,33.6931,73.0639
+Asia,Bangladesh,Dhaka,23.7289,90.3944
+Asia,Japan,Tokyo,35.687,139.7495
+Asia,Philippines,Manila,14.5958,120.9772
+Asia,Vietnam,Hanoi,21.0,105.85
+Asia,Turkey,Ankara,39.93,32.85
+Asia,Iran,Tehran,35.6889,51.3897
+Africa,Nigeria,Abuja,9.0667,7.4833
+Africa,Ethiopia,Addis Ababa,9.03,38.74
+Africa,Egypt,Cairo,30.0444,31.2358
+Africa,Congo (Kinshasa),Kinshasa,-4.3219,15.3119
+Africa,Tanzania,Dodoma,-6.1731,35.7419
+Africa,South Africa,Cape Town,-33.9253,18.4239
+Africa,Kenya,Nairobi,-1.2864,36.8172
+Africa,Uganda,Kampala,0.3136,32.5811
+Africa,Algeria,Algiers,36.7325,3.0872
+Africa,Sudan,Khartoum,15.6031,32.5265
+Europe,Russia,Moscow,55.7506,37.6175
+Europe,Germany,Berlin,52.52,13.405
+Europe,United Kingdom,London,51.5072,-0.1275
+Europe,France,Paris,48.8567,2.3522
+Europe,Italy,Rome,41.8931,12.4828
+Europe,Spain,Madrid,40.4169,-3.7033
+Europe,Ukraine,Kyiv,50.45,30.5233
+Europe,Poland,Warsaw,52.23,21.0111
+Europe,Romania,Bucharest,44.4325,26.1039
+Europe,Netherlands,Amsterdam,52.3728,4.8936
+North America,United States,Washington,38.9047,-77.0163
+North America,Mexico,Mexico City,19.4333,-99.1333
+North America,Canada,Ottawa,45.4247,-75.695
+North America,Guatemala,Guatemala City,14.6417,-90.5133
+North America,Cuba,Havana,23.1367,-82.3589
+North America,Dominican Republic,Santo Domingo,18.4764,-69.8933
+North America,Nicaragua,Managua,12.1364,-86.2514
+North America,El Salvador,San Salvador,13.6989,-89.1914
+South America,Brazil,Brasilia,-15.7939,-47.8828
+South America,Colombia,Bogotá,4.7111,-74.0722
+South America,Argentina,Buenos Aires,-34.6036,-58.3814
+South America,Peru,Lima,-12.06,-77.0375
+South America,Venezuela,Caracas,10.4806,-66.9036
+South America,Chile,Santiago,-33.4372,-70.6506
+South America,Ecuador,Quito,-0.22,-78.5125
+South America,Bolivia,La Paz,-16.4958,-68.1333
+South America,Paraguay,Asuncion,-25.2945,-57.6435
+South America,Uruguay,Montevideo,-34.9056,-56.1842
+Oceania,Australia,Canberra,-35.2931,149.1269
+Oceania,Papua New Guinea,Port Moresby,-9.4789,147.1494
+Oceania,New Zealand,Wellington,-41.2889,174.7772
+Oceania,Fiji,Suva,-18.1333,178.4333
+Oceania,Solomon Islands,Honiara,-9.4333,159.95
+Oceania,"Micronesia, Federated States of",Palikir,6.9172,158.1589
+Oceania,Vanuatu,Port-Vila,-17.7333,168.3167
+Oceania,Samoa,Apia,-13.8333,-171.75
+Oceania,Kiribati,Tarawa,1.3382,173.0176
+Oceania,Tonga,Nuku‘alofa,-21.1333,-175.2
