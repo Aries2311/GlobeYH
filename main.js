@@ -87,8 +87,8 @@ function computePinSize() {
   // tuned defaults
   if (m && e) return 30;      // mobile embed
   if (m && !e) return 34;     // mobile full app
-  if (!m && e) return 52;     // desktop embed
-  return 46;                  // desktop full app
+  if (!m && e) return 46;     // desktop embed
+  return 42;                  // desktop full app
 }
 function observePinSize(cb) {
   if (typeof cb !== 'function') return;
