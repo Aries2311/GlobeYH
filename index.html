@@ -117,6 +117,9 @@
       pointer-events: none !important;
     }
     html.embed .comet { display: none !important; }
+  /* index.html – bawasan ring thickness kapag embed/mobile */
+html.embed .marker-icon { border-width: 2px; }   /* dati 3px */
+@media (max-width:768px){ .marker-icon { border-width: 2px; } }
   </style>
 </head>
 <body>
