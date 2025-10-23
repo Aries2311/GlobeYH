@@ -98,11 +98,6 @@
 
     #loading-spinner { display:none; }
 
-    /* Comets behind globe & UI */
-    .comet { position:fixed; width:2px; height:2px; background:#fff; border-radius:50%; box-shadow:0 0 5px rgba(255,255,255,0.8), 0 0 15px #a0ffff; z-index:1; pointer-events:none; opacity:0; transform:translate(var(--start-x), var(--start-y)); animation:comet-fly var(--duration) linear var(--delay) infinite; }
-    .comet::before { content:''; position:absolute; top:50%; left:50%; width:150px; height:1px; background:linear-gradient(to right, rgba(255,255,255,0), rgba(160,255,255,0.8)); transform:translate(-100%,-50%) rotate(45deg); transform-origin:100% 50%; opacity:0.6; }
-    @keyframes comet-fly { 0%{ transform:translate(var(--start-x), var(--start-y)); opacity:0; } 5%{ opacity:1; } 95%{ opacity:1; } 100%{ transform:translate(var(--end-x), var(--end-y)); opacity:0; } }
-
     /* ===== EMBED MODE ===== */
     html.embed body { background: transparent !important; }
     html.embed #globeViz { background: transparent !important; }
