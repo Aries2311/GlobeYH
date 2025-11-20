@@ -15,24 +15,47 @@ const rawEmbed = (urlParams.get("embed") || "").toLowerCase();
 const NO_UI =
   (urlParams.get("noui") || "").toLowerCase() === "1" ||
   (urlParams.get("ui") || "").toLowerCase() === "0";
-const IN_IFRAME = (() => { try { return window.self !== window.top; } catch { return true; } })();
-const EMBED = IN_IFRAME || rawEmbed === "1" || rawEmbed === "true" ||
-              (rawEmbed !== "" && rawEmbed !== "0" && rawEmbed !== "false") || NO_UI;
-if (EMBED) document.documentElement.classList.add("embed");
 
-const TRANSPARENT_BG = EMBED || (urlParams.get("bg") || "").toLowerCase() === "transparent";
+const IN_IFRAME = (() => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+})();
 
-// ✅ fix: only disable zoom if nozoom=1/true or zoom=0
+const EMBED =
+  IN_IFRAME ||
+  rawEmbed === "1" ||
+  rawEmbed === "true" ||
+  (rawEmbed !== "" && rawEmbed !== "0" && rawEmbed !== "false") ||
+  NO_UI;
+
+if (EMBED) {
+  document.documentElement.classList.add("embed");
+}
+
+const TRANSPARENT_BG =
+  EMBED || (urlParams.get("bg") || "").toLowerCase() === "transparent";
+
+// only disable zoom if nozoom=1/true or zoom=0
 const nz = (urlParams.get("nozoom") || "").toLowerCase();
 const NO_ZOOM = nz === "1" || nz === "true" || urlParams.get("zoom") === "0";
 
 // ============================ helpers ===========================
-const slug = (s) => (s || "").toString().normalize("NFKD")
-  .replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "_")
-  .replace(/^_+|_+$/g, "").toLowerCase();
+const slug = (s) =>
+  (s || "")
+    .toString()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
 
 const canonicalIdOf = (o) =>
-  `${slug((o.city || o.label || "").split(",")[0])}_${Number(o.lat).toFixed(4)}_${Number(o.lng).toFixed(4)}`;
+  `${slug((o.city || o.label || "").split(",")[0])}_${Number(o.lat).toFixed(
+    4
+  )}_${Number(o.lng).toFixed(4)}`;
 
 let allCities = [];
 let pinnedCities = [];
@@ -51,57 +74,92 @@ const ACAD_ICON = "./assets/academy-logo.png";
 const PLAZA_ICON = "./assets/plaza-logo.png";
 const ICONS = { federation: FED_ICON, academy: ACAD_ICON, plaza: PLAZA_ICON };
 
+// helper: normalize + merge single/array brands
+const normalizeBrand = (b) =>
+  String(b || "")
+    .toLowerCase()
+    .trim();
+
+function getBrands(obj) {
+  const arr = Array.isArray(obj?.brands) ? obj.brands : [];
+  const fromArray = arr.map(normalizeBrand).filter(Boolean);
+  const single = obj?.brand ? [normalizeBrand(obj.brand)] : [];
+  const merged = [...fromArray, ...single].filter(Boolean);
+  return [...new Set(merged)];
+}
+
+function getPrimaryBrand(obj) {
+  const brands = getBrands(obj);
+  return brands.length ? brands[0] : null;
+}
+
+// display label: Location - Academy, Plaza
 const displayNameFor = (o) => {
   const base = (o.label || "").split(",")[0].trim();
-  const b = String(o.brand || "").toLowerCase();
-  if (b === "academy") return `${base} - Academy`;
-  if (b === "federation") return `${base} - Federation`;
-  if (b === "plaza") return `${base} - Plaza`;
-  return base;
+  const brands = getBrands(o);
+  if (!brands.length) return base;
+  const pretty = brands.map((b) => {
+    if (b === "academy") return "Academy";
+    if (b === "federation") return "Federation";
+    if (b === "plaza") return "Plaza";
+    return b;
+  });
+  return `${base} - ${pretty.join(", ")}`;
 };
-const iconFor = (o) => ICONS[String(o.brand || "").toLowerCase()] || FED_ICON;
+
+const iconFor = (brand) => ICONS[normalizeBrand(brand)] || FED_ICON;
 
 // =================== Responsive PIN SIZE control =================
 // (auto-detect mobile/desktop + embed, allow ?iconsize=NN override)
 function isMobile() {
   return (
-    matchMedia('(max-width:768px)').matches ||
-    matchMedia('(pointer:coarse)').matches ||
+    matchMedia("(max-width:768px)").matches ||
+    matchMedia("(pointer:coarse)").matches ||
     /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent)
   );
 }
-function isEmbed() {
+function isEmbedMode() {
   const q = new URLSearchParams(location.search);
-  const qEmbed = (q.get('embed') || '').toLowerCase();
-  const noUI = (q.get('ui') || '') === '0' || (q.get('noui') || '') === '1';
-  let inIframe = false; try { inIframe = self !== top; } catch { inIframe = true; }
-  return inIframe || noUI || (qEmbed && qEmbed !== '0' && qEmbed !== 'false');
+  const qEmbed = (q.get("embed") || "").toLowerCase();
+  const noUI = (q.get("ui") || "") === "0" || (q.get("noui") || "") === "1";
+  let inIframe = false;
+  try {
+    inIframe = self !== top;
+  } catch {
+    inIframe = true;
+  }
+  return inIframe || noUI || (qEmbed && qEmbed !== "0" && qEmbed !== "false");
 }
 function computePinSize() {
-  const override = parseInt((urlParams.get("iconsize") || ""), 10);
-  if (Number.isFinite(override)) return Math.max(12, Math.min(128, override));
+  const override = parseInt((urlParams.get("iconsize") || "").trim(), 10);
+  if (Number.isFinite(override)) {
+    return Math.max(12, Math.min(128, override));
+  }
 
   const m = isMobile();
-  const e = isEmbed();
+  const e = isEmbedMode();
 
   // tuned defaults
-  if (m && e) return 30;      // mobile embed
-  if (m && !e) return 34;     // mobile full app
-  if (!m && e) return 46;     // desktop embed
-  return 42;                  // desktop full app
+  if (m && e) return 30; // mobile embed
+  if (m && !e) return 34; // mobile full app
+  if (!m && e) return 46; // desktop embed
+  return 42; // desktop full app
 }
 function observePinSize(cb) {
-  if (typeof cb !== 'function') return;
+  if (typeof cb !== "function") return;
   let last = -1;
   const run = () => {
     const sz = computePinSize();
-    if (sz !== last) { last = sz; cb(sz); }
+    if (sz !== last) {
+      last = sz;
+      cb(sz);
+    }
   };
   run();
   const ro = new ResizeObserver(run);
   ro.observe(document.documentElement);
-  addEventListener('resize', run);
-  addEventListener('orientationchange', run);
+  addEventListener("resize", run);
+  addEventListener("orientationchange", run);
 }
 
 // mutable size used by renderers
@@ -109,16 +167,22 @@ let BRAND_ICON_SIZE = computePinSize();
 observePinSize((sz) => {
   BRAND_ICON_SIZE = sz;
   // update any already-rendered DOM markers
-  document.querySelectorAll('.marker-icon, .yh-pin-img').forEach(img => {
-    img.style.width = sz + 'px';
-    img.style.height = sz + 'px';
-  });
+  document
+    .querySelectorAll(".marker-icon, .yh-pin-img")
+    .forEach((img) => {
+      img.style.width = sz + "px";
+      img.style.height = sz + "px";
+    });
 });
 
 // ============================== DOM =============================
 const globeContainer = document.getElementById("globeViz");
-const uploadModal = document.getElementById("uploadModal") ? new bootstrap.Modal(document.getElementById("uploadModal")) : null;
-const pinningModal = document.getElementById("pinningModal") ? new bootstrap.Modal(document.getElementById("pinningModal")) : null;
+const uploadModal = document.getElementById("uploadModal")
+  ? new bootstrap.Modal(document.getElementById("uploadModal"))
+  : null;
+const pinningModal = document.getElementById("pinningModal")
+  ? new bootstrap.Modal(document.getElementById("pinningModal"))
+  : null;
 const searchInput = document.getElementById("search-input");
 const searchResultsList = document.getElementById("search-results");
 const pinningModalText = document.getElementById("pinningModalText");
@@ -129,7 +193,9 @@ const loadingSpinner = document.getElementById("loading-spinner");
 const statusMessage = document.getElementById("statusMessage");
 const csvFile = document.getElementById("csvFile");
 const brandModalEl = document.getElementById("brandModal");
-const brandModal = brandModalEl ? new bootstrap.Modal(brandModalEl) : null;
+const brandModal = brandModalEl
+  ? new bootstrap.Modal(brandModalEl)
+  : null;
 const brandModalText = document.getElementById("brandModalText");
 let chooseUnpinBtn = document.getElementById("chooseUnpinBtn");
 
@@ -150,48 +216,52 @@ if (brandModalEl && !chooseUnpinBtn) {
 let pendingCity = null;
 
 // Admin gating
-const isLocal = ["localhost", "127.0.0.1", "::1"].includes(location.hostname) || location.protocol === "file:";
+const isLocal =
+  ["localhost", "127.0.0.1", "::1"].includes(location.hostname) ||
+  location.protocol === "file:";
 const isAdminFlag = localStorage.getItem("yh_admin") === "1";
 const canUpload = !EMBED && (isLocal || isAdminFlag);
-const uploadGroup = document.getElementById("uploadControls") || uploadBtn?.parentElement;
+const uploadGroup =
+  document.getElementById("uploadControls") || uploadBtn?.parentElement;
 if (uploadGroup && !canUpload) uploadGroup.style.display = "none";
 
-// =========================== Globe =============================
+// =========================== Globe ==============================
 const world = Globe()(globeContainer)
-  .globeImageUrl('//unpkg.com/three-globe/example/img/earth-day.jpg')
-  .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+  .globeImageUrl("//unpkg.com/three-globe/example/img/earth-day.jpg")
+  .bumpImageUrl("//unpkg.com/three-globe/example/img/earth-topology.png")
   .showGraticules(true)
   .showAtmosphere(true);
 
-// If transparent mode (embed or ?bg=transparent), clear ALL backgrounds
+// Transparent background for embed
 if (TRANSPARENT_BG) {
-  world.backgroundColor('rgba(0,0,0,0)');
+  world.backgroundColor("rgba(0,0,0,0)");
   try {
     world.scene().background = null;
     const r = world.renderer();
     r.setClearColor(0x000000, 0);
     r.setClearAlpha(0);
-    globeContainer.style.background = 'transparent';
-    document.body.style.background = 'transparent';
+    globeContainer.style.background = "transparent";
+    document.body.style.background = "transparent";
   } catch {}
 } else {
-  world.backgroundColor('#000000'); // normal (hindi embed)
+  world.backgroundColor("#000000");
 }
 
 // ---- LABELS LAYER for the overlay (embedded on surface) ----
 world
   .labelsData([])
-  .labelText(d => d.city)
-  .labelLat(d => d.lat)
-  .labelLng(d => d.lng)
-  .labelColor(() => "rgba(0,0,0,1)")  // black
-  .labelSize(() => .95)
+  .labelText((d) => d.city)
+  .labelLat((d) => d.lat)
+  .labelLng((d) => d.lng)
+  .labelColor(() => "rgba(0,0,0,1)") // black
+  .labelSize(() => 0.95)
   .labelAltitude(0.0)
   .labelDotRadius(0)
   .labelResolution(4)
   .labelsTransitionDuration(300);
 
-(world.controls().autoRotate = false), (world.controls().autoRotateSpeed = 0.0);
+world.controls().autoRotate = false;
+world.controls().autoRotateSpeed = 0.0;
 const ctrl = world.controls();
 if (NO_ZOOM) {
   ctrl.enableZoom = false;
@@ -200,7 +270,16 @@ if (NO_ZOOM) {
   ctrl.minDistance = dist;
   ctrl.maxDistance = dist;
   const dom = world.renderer().domElement;
-  dom.addEventListener("touchmove", (e) => { if (e.touches?.length >= 2) { e.preventDefault(); e.stopPropagation(); } }, { passive: false });
+  dom.addEventListener(
+    "touchmove",
+    (e) => {
+      if (e.touches?.length >= 2) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    { passive: false }
+  );
 } else {
   ctrl.enableZoom = true;
   ctrl.enableRotate = true;
@@ -215,25 +294,51 @@ function parseTop30FromJSON() {
     const arr = JSON.parse(el.textContent || "[]");
     richestCities = (arr || [])
       .map((o) => ({ ...o, richest: true }))
-      .filter((o) => o && o.city && !Number.isNaN(Number(o.lat)) && !Number.isNaN(Number(o.lng)));
+      .filter(
+        (o) =>
+          o &&
+          o.city &&
+          !Number.isNaN(Number(o.lat)) &&
+          !Number.isNaN(Number(o.lng))
+      );
     richestLoaded = richestCities.length > 0;
     return richestLoaded;
-  } catch (e) { console.warn("[richest/top30] JSON parse failed", e); return false; }
+  } catch (e) {
+    console.warn("[richest/top30] JSON parse failed", e);
+    return false;
+  }
 }
 
 // ========================== CSV parser ==========================
 function parseCsv(text) {
-  const lines = (text || "").split(/\r?\n/).filter((l) => l.trim().length);
+  const lines = (text || "")
+    .split(/\r?\\n/)
+    .filter((l) => l.trim().length);
   if (lines.length < 2) return [];
-  const split = (line) => (line.match(/(?:"[^"]*"|[^,]+)/g) || []).map((v) => v.trim().replace(/^"|"$/g, ""));
+  const split = (line) =>
+    (line.match(/(?:\"[^\"]*\"|[^,]+)/g) || []).map((v) =>
+      v.trim().replace(/^\"|\"$/g, "")
+    );
   const headers = split(lines[0]).map((h) => h.toLowerCase());
-  const idx = { city: headers.indexOf("city"), lat: headers.indexOf("lat"), lng: headers.indexOf("lng"), country: headers.indexOf("country") };
+  const idx = {
+    city: headers.indexOf("city"),
+    lat: headers.indexOf("lat"),
+    lng: headers.indexOf("lng"),
+    country: headers.indexOf("country")
+  };
   const rows = [];
   for (let i = 1; i < lines.length; i++) {
     const v = split(lines[i]);
-    const city = v[idx.city]; const lat = Number(v[idx.lat]); const lng = Number(v[idx.lng]);
+    const city = v[idx.city];
+    const lat = Number(v[idx.lat]);
+    const lng = Number(v[idx.lng]);
     if (!city || Number.isNaN(lat) || Number.isNaN(lng)) continue;
-    rows.push({ city, lat, lng, country: idx.country !== -1 ? v[idx.country] || "" : "" });
+    rows.push({
+      city,
+      lat,
+      lng,
+      country: idx.country !== -1 ? v[idx.country] || "" : ""
+    });
   }
   return rows;
 }
@@ -249,7 +354,9 @@ async function loadRichest() {
         richestLoaded = richestCities.length > 0;
       }
     }
-  } catch (e) { console.warn("[richest] inline JSON parse failed", e); }
+  } catch (e) {
+    console.warn("[richest] inline JSON parse failed", e);
+  }
 
   if (!richestLoaded) {
     const tryFiles = [
@@ -272,11 +379,15 @@ async function loadRichest() {
           richestLoaded = true;
           break;
         }
-      } catch { /* next */ }
+      } catch {
+        // try next
+      }
     }
   }
 
-  if (!richestLoaded) parseTop30FromJSON();
+  if (!richestLoaded) {
+    parseTop30FromJSON();
+  }
 
   refreshCombinedRender();
 }
@@ -285,25 +396,35 @@ async function loadRichest() {
 function ensureBoldLabels() {
   if (!showRichest || !richestCities?.length) return;
   requestAnimationFrame(() => {
-    (richestCities || []).forEach(d => {
+    (richestCities || []).forEach((d) => {
       const t = d.__threeObj;
-      if (t) { t.fontWeight = 'bold'; t.fontFace = 'Inter'; }
+      if (t) {
+        t.fontWeight = "bold";
+        t.fontFace = "Inter";
+      }
     });
   });
 }
 
 const _measure = (() => {
-  const cvs = document.createElement('canvas');
-  const ctx = cvs.getContext('2d');
+  const cvs = document.createElement("canvas");
+  const ctx = cvs.getContext("2d");
   return (text, px) => {
-    try { ctx.font = `bold ${px}px Inter, Arial, sans-serif`; } catch {}
+    try {
+      ctx.font = `bold ${px}px Inter, Arial, sans-serif`;
+    } catch {}
     const w = ctx.measureText(text || "").width;
     return { w, h: px * 1.15 };
   };
 })();
 
 function rectanglesOverlap(a, b) {
-  return !(a.x2 < b.x1 || a.x1 > b.x2 || a.y2 < b.y1 || a.y1 > b.y2);
+  return !(
+    a.x2 < b.x1 ||
+    a.x1 > b.x2 ||
+    a.y2 < b.y1 ||
+    a.y1 > b.y2
+  );
 }
 
 function recomputeDeclutter() {
@@ -314,9 +435,14 @@ function recomputeDeclutter() {
   const maxPerRadius = 2;
 
   const items = (richestCities || [])
-    .map(d => ({ d, pos: world.getScreenCoords(d.lat, d.lng) }))
-    .filter(x => x.pos && Number.isFinite(x.pos.x) && Number.isFinite(x.pos.y))
-    .sort((a, b) => (b.d.city || "").length - (a.d.city || "").length);
+    .map((d) => ({ d, pos: world.getScreenCoords(d.lat, d.lng) }))
+    .filter(
+      (x) =>
+        x.pos && Number.isFinite(x.pos.x) && Number.isFinite(x.pos.y)
+    )
+    .sort(
+      (a, b) => (b.d.city || "").length - (a.d.city || "").length
+    );
 
   const accepted = [];
   for (const it of items) {
@@ -324,29 +450,33 @@ function recomputeDeclutter() {
     if (!t) continue;
     let neighbors = 0;
     for (const a of accepted) {
-      const dx = it.pos.x - a.pos.x, dy = it.pos.y - a.pos.y;
-      if ((dx*dx + dy*dy) <= (R*R)) {
+      const dx = it.pos.x - a.pos.x;
+      const dy = it.pos.y - a.pos.y;
+      if (dx * dx + dy * dy <= R * R) {
         neighbors++;
         if (neighbors >= maxPerRadius) break;
       }
     }
     if (neighbors >= maxPerRadius) t.visible = false;
-    else { t.visible = true; accepted.push(it); }
+    else {
+      t.visible = true;
+      accepted.push(it);
+    }
   }
 }
 
 function renderOverlayLabels() {
-  world.labelsData(showRichest ? (richestCities || []) : []);
+  world.labelsData(showRichest ? richestCities || [] : []);
   ensureBoldLabels();
   requestAnimationFrame(recomputeDeclutter);
 }
 
-world.controls().addEventListener('change', () => {
+world.controls().addEventListener("change", () => {
   ensureBoldLabels();
   recomputeDeclutter();
 });
 
-// ====== RENDERING FOR PINS ======
+// ====== RENDERING FOR PINS (multi-brand) ======
 function renderGlobeMarkers(pinnedOnly) {
   world
     .htmlElementsData(pinnedOnly)
@@ -354,36 +484,69 @@ function renderGlobeMarkers(pinnedOnly) {
       const wrap = document.createElement("div");
       wrap.className = "marker-container";
 
-      const brand = String(d.brand || "").toLowerCase();
+      const brands = getBrands(d);
+      const primary = brands[0] || null;
 
-      // ICON
-      const img = document.createElement("img");
-      img.className = `marker-icon ${brand ? `brand-${brand}` : ""}`.trim();
-      img.src = iconFor(d);
-      img.style.width = `${BRAND_ICON_SIZE}px`;
-      img.style.height = `${BRAND_ICON_SIZE}px`;
+      // ICON ROW
+      const iconsRow = document.createElement("div");
+      iconsRow.style.display = "flex";
+      iconsRow.style.flexDirection = "row";
+      iconsRow.style.alignItems = "center";
+      iconsRow.style.justifyContent = "center";
+      iconsRow.style.gap = "4px";
 
-      img.onclick = (e) => {
-        e.stopPropagation();
-        if (EMBED || (!isLocal && !isAdminFlag)) return;
-        const id = canonicalIdOf(d);
-        const isPinned = !!d.is_pinned;
-        pinningModalLabel && (pinningModalLabel.textContent = "Pin / Unpin Location");
-        pinningModalText.textContent = `Do you want to toggle the pin status for ${displayNameFor(d)}? Current: ${isPinned ? "Yes" : "No"}`;
-        togglePinBtn.textContent = isPinned ? "Unpin" : "Pin";
-        togglePinBtn.classList.toggle("btn-danger", isPinned);
-        togglePinBtn.classList.toggle("btn-primary", !isPinned);
-        togglePinBtn.dataset.docId = id;
-        togglePinBtn.dataset.currentStatus = String(isPinned);
-        pinningModal?.show();
+      const makeIcon = (brand) => {
+        const img = document.createElement("img");
+        const bNorm = normalizeBrand(brand);
+        img.className = `marker-icon${
+          bNorm ? " brand-" + bNorm : ""
+        }`.trim();
+        img.src = iconFor(bNorm || "federation");
+        img.style.width = `${BRAND_ICON_SIZE}px`;
+        img.style.height = `${BRAND_ICON_SIZE}px`;
+        img.onclick = (e) => {
+          e.stopPropagation();
+          if (EMBED || (!isLocal && !isAdminFlag)) return;
+          const id = d.id || canonicalIdOf(d);
+          const isPinned = !!d.is_pinned;
+          if (pinningModalLabel) {
+            pinningModalLabel.textContent = "Pin / Unpin Location";
+          }
+          if (pinningModalText) {
+            pinningModalText.textContent = `Do you want to toggle the pin status for ${displayNameFor(
+              d
+            )}? Current: ${isPinned ? "Yes" : "No"}`;
+          }
+          if (togglePinBtn) {
+            togglePinBtn.textContent = isPinned ? "Unpin" : "Pin";
+            togglePinBtn.classList.toggle("btn-danger", isPinned);
+            togglePinBtn.classList.toggle("btn-primary", !isPinned);
+            togglePinBtn.dataset.docId = id;
+            togglePinBtn.dataset.currentStatus = String(isPinned);
+          }
+          pinningModal?.show();
+        };
+        return img;
       };
+
+      if (!brands.length) {
+        iconsRow.appendChild(makeIcon(null));
+      } else if (brands.length === 1) {
+        iconsRow.appendChild(makeIcon(brands[0]));
+      } else {
+        // multiple brands: render side-by-side
+        brands.forEach((b) => iconsRow.appendChild(makeIcon(b)));
+      }
 
       // LABEL
       const label = document.createElement("span");
-      label.className = `marker-label ${brand ? `brand-${brand}` : ""}`.trim();
+      label.className = "marker-label";
+      if (primary) {
+        label.className += " brand-" + normalizeBrand(primary);
+      }
       label.textContent = displayNameFor(d);
 
-      wrap.appendChild(img);
+      wrap.appendChild(iconsRow);
       wrap.appendChild(label);
       return wrap;
     })
@@ -402,30 +565,79 @@ togglePinBtn?.addEventListener("click", async () => {
   const docId = togglePinBtn.dataset.docId;
   const cur = togglePinBtn.dataset.currentStatus === "true";
   togglePinBtn.disabled = true;
-  try { await togglePinStatus(docId, cur); pinningModal?.hide(); }
-  catch (e) { Swal.fire({ icon: "error", title: "Oops", text: e?.message || "Failed to toggle pin." }); }
-  finally { togglePinBtn.disabled = false; }
+  try {
+    await togglePinStatus(docId, cur);
+    pinningModal?.hide();
+  } catch (e) {
+    Swal.fire({
+      icon: "error",
+      title: "Oops",
+      text: e?.message || "Failed to toggle pin."
+    });
+  } finally {
+    togglePinBtn.disabled = false;
+  }
+});
+
+// ====================== CSV upload trigger ======================
+uploadBtn?.addEventListener("click", () => {
+  if (!csvFile?.files?.length) {
+    Swal.fire({
+      icon: "warning",
+      title: "Choose CSV",
+      text: "Please select a CSV file first."
+    });
+    return;
+  }
+  loadingSpinner && (loadingSpinner.style.display = "inline-block");
+  statusMessage && (statusMessage.textContent = "Uploading...");
+  const file = csvFile.files[0];
+  uploadCitiesFromCsv(file, (msg, type) => {
+    loadingSpinner && (loadingSpinner.style.display = "none");
+    statusMessage && (statusMessage.textContent = msg || "");
+    if (type === "success") {
+      Swal.fire({ icon: "success", title: "Done", text: msg || "" });
+      uploadModal?.hide();
+    } else if (type === "error") {
+      Swal.fire({ icon: "error", title: "Error", text: msg || "" });
+    }
+  });
 });
 
 // ===================== Search / hydrate all =====================
-const ensureHydratedAllCities = () => { if (!hydratedAll) { hydratedAll = true; unsubAll = listenToCities((cities) => { allCities = cities; }); } };
+const ensureHydratedAllCities = () => {
+  if (!hydratedAll) {
+    hydratedAll = true;
+    unsubAll = listenToCities((cities) => {
+      allCities = cities;
+    });
+  }
+};
+
 if (!EMBED) {
   searchInput?.addEventListener("focus", ensureHydratedAllCities);
   searchInput?.addEventListener("input", () => {
     ensureHydratedAllCities();
     clearTimeout(searchTimeout);
     const value = (searchInput.value || "").toLowerCase().trim();
-    if (!value) { searchResultsList.style.display = "none"; return; }
+    if (!value) {
+      searchResultsList.style.display = "none";
+      return;
+    }
     searchTimeout = setTimeout(() => {
       const q = (searchInput.value || "").toLowerCase().trim();
       if (!q) return;
       const source = hydratedAll ? allCities : pinnedCities;
-      const matches = source.filter((c) => (c.label || "").toLowerCase().includes(q));
+      const matches = source.filter((c) =>
+        (c.label || "").toLowerCase().includes(q)
+      );
       const byId = new Map();
       for (const m of matches) {
         const cid = canonicalIdOf(m);
         const existing = byId.get(cid);
-        if (!existing || (!!m.is_pinned && !existing.is_pinned)) byId.set(cid, m);
+        if (!existing || (!!m.is_pinned && !existing.is_pinned)) {
+          byId.set(cid, m);
+        }
       }
       displaySearchResults(Array.from(byId.values()));
     }, 220);
@@ -434,15 +646,45 @@ if (!EMBED) {
 
 function displaySearchResults(results) {
   if (EMBED) return;
+
   searchResultsList.innerHTML = "";
-  if (!results?.length) { searchResultsList.style.display = "none"; return; }
+  if (!results?.length) {
+    searchResultsList.style.display = "none";
+    return;
+  }
+
+  // current query (para ma-prioritize natin ang exact match like "Spain")
+  const q = (searchInput?.value || "").toLowerCase().trim();
+
+  const score = (city) => {
+    const label = (city.label || "").toLowerCase();
+    const base = label.split(",")[0].trim(); // e.g. "spain" from "Spain, Europe"
+    let s = 0;
+
+    if (q) {
+      if (base === q) s -= 100;          // pinaka-priority: eksaktong "Spain"
+      else if (base.startsWith(q)) s -= 80;
+      else if (label.startsWith(q)) s -= 60;
+      else if (label.includes(q)) s -= 40;
+    }
+
+    if (city.is_pinned) s -= 10;         // pinned slight bonus
+    return s;
+  };
+
+  // sort by relevance para mauna yung country doc
+  const sorted = results.slice().sort((a, b) => score(a) - score(b));
+
   searchResultsList.style.display = "block";
-  results.slice(0, 10).forEach((city) => {
+  sorted.slice(0, 20).forEach((city) => {   // up to 20 results
     const li = document.createElement("li");
     li.textContent = displayNameFor(city);
     li.onclick = () => {
       const currentPOV = world.pointOfView ? world.pointOfView() : { altitude: 0.5 };
-      world.pointOfView({ lat: city.lat, lng: city.lng, altitude: NO_ZOOM ? currentPOV.altitude : 0.5 }, 1000);
+      world.pointOfView(
+        { lat: city.lat, lng: city.lng, altitude: NO_ZOOM ? currentPOV.altitude : 0.5 },
+        1000
+      );
       searchResultsList.style.display = "none";
       searchInput.value = "";
 
@@ -459,19 +701,30 @@ function displaySearchResults(results) {
   });
 }
 
+
 // =================== Brand / Unpin handlers ====================
 async function applyBrandChoice(brand, cityObj = null) {
   try {
     const c = cityObj || pendingCity;
     if (!c) return;
     const docId = c.id || canonicalIdOf(c);
-    if (!c.is_pinned) { await setCityBrandAndPin(docId, brand, true); }
-    else { await setCityBrand(docId, brand); }
+    if (!c.is_pinned) {
+      await setCityBrandAndPin(docId, brand, true);
+    } else {
+      await setCityBrand(docId, brand);
+    }
     brandModal && brandModal.hide();
   } catch (e) {
-    Swal.fire({ icon: "error", title: "Oops", text: e?.message || e?.code || "Failed to set brand." });
-  } finally { pendingCity = null; }
+    Swal.fire({
+      icon: "error",
+      title: "Oops",
+      text: e?.message || e?.code || "Failed to set brand."
+    });
+  } finally {
+    pendingCity = null;
+  }
 }
+
 async function unpinChosenCity() {
   try {
     if (!pendingCity) return;
@@ -479,21 +732,39 @@ async function unpinChosenCity() {
     await setPinStatus(docId, false);
     brandModal && brandModal.hide();
   } catch (e) {
-    Swal.fire({ icon: "error", title: "Oops", text: e?.message || e?.code || "Failed to unpin." });
-  } finally { pendingCity = null; }
+    Swal.fire({
+      icon: "error",
+      title: "Oops",
+      text: e?.message || e?.code || "Failed to unpin."
+    });
+  } finally {
+    pendingCity = null;
+  }
 }
-document.getElementById("chooseAcademyBtn")?.addEventListener("click", () => applyBrandChoice("academy"));
-document.getElementById("chooseFederationBtn")?.addEventListener("click", () => applyBrandChoice("federation"));
-document.getElementById("choosePlazaBtn")?.addEventListener("click", () => applyBrandChoice("plaza"));
-document.getElementById("chooseUnpinBtn")?.addEventListener("click", unpinChosenCity);
+
+document
+  .getElementById("chooseAcademyBtn")
+  ?.addEventListener("click", () => applyBrandChoice("academy"));
+document
+  .getElementById("chooseFederationBtn")
+  ?.addEventListener("click", () => applyBrandChoice("federation"));
+document
+  .getElementById("choosePlazaBtn")
+  ?.addEventListener("click", () => applyBrandChoice("plaza"));
+document
+  .getElementById("chooseUnpinBtn")
+  ?.addEventListener("click", unpinChosenCity);
 
 // ========================= Realtime ============================
 window.onload = () => {
-  listenToCities((cities) => {
-    pinnedCities = cities;
-    refreshCombinedRender();
-    console.log(`[SNAPSHOT] pinned=${pinnedCities.length}`);
-  }, { onlyPinned: true });
+  listenToCities(
+    (cities) => {
+      pinnedCities = cities;
+      refreshCombinedRender();
+      console.log(`[SNAPSHOT] pinned=${pinnedCities.length}`);
+    },
+    { onlyPinned: true }
+  );
 
   loadRichest();
 
@@ -502,8 +773,9 @@ window.onload = () => {
     const reflect = () => {
       btnTop.classList.toggle("btn-outline-info", showRichest);
       btnTop.classList.toggle("btn-secondary", !showRichest);
-      btnTop.innerHTML = showRichest ? '<i class="fa-solid fa-trophy"></i> Continents ×10'
-                                     : '<i class="fa-solid fa-trophy"></i> Continents ×10 (off)';
+      btnTop.innerHTML = showRichest
+        ? '<i class="fa-solid fa-trophy"></i> Continents ×10'
+        : '<i class="fa-solid fa-trophy"></i> Continents ×10 (off)';
     };
     reflect();
     btnTop.addEventListener("click", () => {
@@ -518,12 +790,15 @@ window.onload = () => {
 const searchContainer = document.querySelector(".search-bar-container");
 if (searchContainer && EMBED) {
   searchContainer.style.display = "none";
-  const sr = document.getElementById("search-results"); if (sr) sr.style.display = "none";
+  const sr = document.getElementById("search-results");
+  if (sr) sr.style.display = "none";
 }
 if (EMBED) {
   const uiContainer = document.querySelector(".ui-container");
   const uploadControls = document.getElementById("uploadControls");
   if (uiContainer) uiContainer.style.display = "none";
   if (uploadControls) uploadControls.style.display = "none";
-  document.querySelectorAll(".modal, .modal-backdrop").forEach((el) => (el.style.display = "none"));
+  document
+    .querySelectorAll(".modal, .modal-backdrop")
+    .forEach((el) => (el.style.display = "none"));
 }
